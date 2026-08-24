@@ -17,11 +17,13 @@ def _status_with(version_probe, daemon_probe=None, ext_on_disk=False):
             return version_probe
         return daemon_probe or ProbeResult("missing")
 
-    with patch("agent_reach.backends.opencli.probe_command", side_effect=fake_probe), \
-         patch(
-             "agent_reach.backends.opencli._extension_installed_on_disk",
-             return_value=ext_on_disk,
-         ):
+    with (
+        patch("agent_reach.backends.opencli.probe_command", side_effect=fake_probe),
+        patch(
+            "agent_reach.backends.opencli._extension_installed_on_disk",
+            return_value=ext_on_disk,
+        ),
+    ):
         return opencli_status(), calls
 
 
@@ -35,7 +37,7 @@ def test_not_installed():
 def test_broken_node_env_gives_npm_hint():
     st, _ = _status_with(ProbeResult("broken", hint="x"))
     assert st.installed and st.broken
-    assert "npm install -g @jackwener/opencli" in st.hint
+    assert "@jackwener/opencli@VERSION" in st.hint
     assert not st.ready
 
 

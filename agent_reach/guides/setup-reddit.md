@@ -17,14 +17,15 @@ Agent Reach 通过 **rdt-cli** 实现 Reddit 的搜索和阅读功能：
 which rdt && echo "installed" || echo "not installed"
 ```
 
-2. 如果未安装，自动安装（PyPI 版本暂时落后，从 GitHub 安装最新版）：
+2. 如果用户明确批准，安装经过固定提交审阅的版本：
 ```bash
-pipx install 'git+https://github.com/public-clis/rdt-cli.git'
+pipx install 'git+https://github.com/public-clis/rdt-cli.git@5e4fb3720d5c174e976cd425ccc3b879d52cac66'
 ```
 
 或一键安装：
 ```bash
-agent-reach install --env=auto --channels=reddit
+agent-reach install --env=auto --channels=reddit --dry-run
+agent-reach install --env=auto --channels=reddit --yes
 ```
 
 ## 使用示例
@@ -41,7 +42,8 @@ rdt read POST_ID
 
 ## 需要用户手动做的步骤
 
-无。rdt-cli 通过 `agent-reach install --env=auto` 自动安装。
+登录是显式用户操作。桌面 OpenCLI 复用浏览器登录态；rdt-cli 需要用户运行
+`rdt login`。Agent Reach 不代替用户改变登录状态。
 
 ## Fallback：Exa 搜索
 

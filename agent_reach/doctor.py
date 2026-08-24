@@ -1,60 +1,120 @@
 # -*- coding: utf-8 -*-
-"""Environment health checker — powered by channels.
+"""Read-only, bounded environment health checks."""
 
-Each channel knows how to check itself. Doctor just collects the results.
-"""
+from __future__ import annotations
 
-from typing import Dict
-from agent_reach.config import Config
+import contextvars
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from html import escape as html_escape
+from pathlib import Path
+from typing import Any, Callable
+
 from agent_reach.channels import get_all_channels
+from agent_reach.config import Config
+from agent_reach.models import CapabilityReadiness, ChannelHealth
+from agent_reach.probe import probe_session
 
 
-def check_all(config: Config) -> Dict[str, dict]:
+def check_all(config: Config | None, *, deadline: float = 30.0) -> dict[str, dict[str, object]]:
     """Check all channels and return status dict.
 
     A single misbehaving channel must never take the whole report down,
     so per-channel exceptions degrade to status="error".
     """
-    results = {}
-    for ch in get_all_channels():
+    channels = get_all_channels()
+
+    def check_channel(ch):
         try:
             status, message = ch.check(config)
             active = getattr(ch, "active_backend", None)
-        except Exception as e:  # noqa: BLE001 — doctor must survive any channel
-            # Channels are registry singletons: a stale active_backend from a
-            # previous check must not leak into an errored result.
-            status, message, active = "error", f"体检异常：{e}", None
-        results[ch.name] = {
-            "status": status,
-            "name": ch.description,
-            "message": message,
-            "tier": ch.tier,
-            "backends": ch.backends,
-            "active_backend": active,
+        except Exception as exc:  # doctor must survive any channel
+            # Clear request-local backend state before reporting an error.
+            status, message, active = "error", f"体检异常：{exc}", None
+            ch.active_backend = None
+        if hasattr(ch, "capability_readiness"):
+            capabilities = ch.capability_readiness(status, message)
+        else:
+            translated = {
+                "ok": "ready",
+                "warn": "degraded",
+                "off": "unavailable",
+                "error": "error",
+            }.get(status, "error")
+            capabilities = {"read": CapabilityReadiness(translated, active, message)}
+        return ch.name, ChannelHealth(
+            status=status,
+            name=ch.description,
+            message=message,
+            tier=ch.tier,
+            backends=list(ch.backends),
+            active_backend=active,
+            capabilities=capabilities,
+        ).to_dict()
+
+    results: dict[str, dict[str, object]] = {}
+    executor = ThreadPoolExecutor(max_workers=min(8, len(channels)))
+    with probe_session():
+        futures = {
+            executor.submit(contextvars.copy_context().run, check_channel, channel): channel
+            for channel in channels
         }
+        try:
+            for future in as_completed(futures, timeout=deadline):
+                name, result = future.result()
+                results[name] = result
+        except TimeoutError:
+            pass
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    for channel in channels:
+        if channel.name not in results:
+            channel.active_backend = None
+            message = f"健康检查超过总时限（{deadline:g}s）"
+            results[channel.name] = ChannelHealth(
+                status="error",
+                name=channel.description,
+                message=message,
+                tier=channel.tier,
+                backends=list(channel.backends),
+                active_backend=None,
+                capabilities=channel.capability_readiness("error", message),
+            ).to_dict()
+
+    # Preserve registry order despite concurrent completion.
+    results = {channel.name: results[channel.name] for channel in channels}
     return results
 
 
-def _name_msg(r: dict, escape) -> str:
+def _name_msg(r: dict[str, object], escape: Callable[[str], str]) -> str:
     """Render one channel line; show the active backend when there is a choice."""
-    text = f"[bold]{escape(r['name'])}[/bold] — {escape(r['message'])}"
+    text = f"[bold]{escape(str(r['name']))}[/bold] — {escape(str(r['message']))}"
     active = r.get("active_backend")
-    if active and len(r.get("backends", [])) > 1:
-        text += f" [dim]（当前后端：{escape(active)}）[/dim]"
+    backends = r.get("backends", [])
+    if active and isinstance(backends, list) and len(backends) > 1:
+        text += f" [dim]（当前后端：{escape(str(active))}）[/dim]"
     return text
 
 
-def format_report(results: Dict[str, dict]) -> str:
+def format_report(results: dict[str, dict[str, object]]) -> str:
     """Format results as a readable text report (with Rich markup)."""
+    rich_escape: Any = None
     try:
-        from rich.markup import escape
+        from rich.markup import escape as imported_rich_escape
+
+        rich_escape = imported_rich_escape
     except ImportError:
-        escape = lambda x: x
+        pass
+
+    def escape(value: str) -> str:
+        return rich_escape(value) if rich_escape is not None else html_escape(value)
 
     lines = []
     lines.append("[bold cyan]Agent Reach 状态[/bold cyan]")
     lines.append("[cyan]" + "=" * 40 + "[/cyan]")
-    lines.append("图例：[green]✅[/green] 可用  [yellow][!][/yellow] 已装但需配置/登录  [red][X][/red] 未安装")
+    lines.append(
+        "图例：[green]✅[/green] 可用  [yellow][!][/yellow] 已装但需配置/登录  [red][X][/red] 未安装"
+    )
 
     ok_count = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
@@ -100,18 +160,18 @@ def format_report(results: Dict[str, dict]) -> str:
     # Summarize inactive optional channels in one line instead of listing each
     all_inactive = list(tier1_inactive.values()) + list(tier2_inactive.values())
     if all_inactive:
-        names = [r["name"] for r in all_inactive]
+        names = [str(r["name"]) for r in all_inactive]
         lines.append(
             f"还有 {len(names)} 个可选渠道可以解锁（{'、'.join(names)}），"
-            "告诉你的 Agent「帮我装 XXX」即可"
+            "先审阅 `agent-reach install --channels=... --dry-run`，"
+            "再通过单独的明确授权执行安装。"
         )
 
     # Security check: config file permissions (Unix only)
-    import os
     import stat
     import sys
 
-    config_path = Config.CONFIG_DIR / "config.yaml"
+    config_path = Path.home() / ".agent-reach" / "config.yaml"
     if config_path.exists() and sys.platform != "win32":
         try:
             mode = config_path.stat().st_mode

@@ -32,7 +32,9 @@ class TestFormatXhsResult(unittest.TestCase):
         "image_list": [
             {
                 "url": "https://img.example.com/1.jpg",
-                "info_list": [{"url": "https://img.example.com/1_small.jpg", "image_scene": "WB_DFT"}],
+                "info_list": [
+                    {"url": "https://img.example.com/1_small.jpg", "image_scene": "WB_DFT"}
+                ],
                 "width": 1080,
                 "height": 1440,
                 "trace_id": "tr_123",
@@ -64,10 +66,13 @@ class TestFormatXhsResult(unittest.TestCase):
         self.assertEqual(result["user"]["nickname"], "小红")
         self.assertEqual(result["liked_count"], "100")
         self.assertEqual(result["collected_count"], "50")
-        self.assertEqual(result["images"], [
-            "https://img.example.com/1.jpg",
-            "https://img.example.com/2.jpg",
-        ])
+        self.assertEqual(
+            result["images"],
+            [
+                "https://img.example.com/1.jpg",
+                "https://img.example.com/2.jpg",
+            ],
+        )
         self.assertEqual(result["tags"], ["旅行", "美食"])
 
     def test_single_note_drops_useless_fields(self):

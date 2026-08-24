@@ -23,26 +23,29 @@ Backend routing semantics:
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+from typing import Any
+
+from agent_reach.models import CapabilityReadiness
 
 
 class Channel(ABC):
     """Base class for all channels."""
 
-    name: str = ""                    # e.g. "youtube"
-    description: str = ""             # e.g. "YouTube 视频和字幕"
-    backends: List[str] = []          # ordered candidates — backends[0] = preferred
-    tier: int = 0                     # 0=zero-config, 1=needs free key, 2=needs setup
+    name: str = ""  # e.g. "youtube"
+    description: str = ""  # e.g. "YouTube 视频和字幕"
+    backends: list[str] = []  # ordered candidates — backends[0] = preferred
+    tier: int = 0  # 0=zero-config, 1=needs free key, 2=needs setup
+    capabilities: tuple[str, ...] = ("read",)
 
     #: Backend currently serving this channel; set by check(), None = unavailable.
-    active_backend: Optional[str] = None
+    active_backend: str | None = None
 
     @abstractmethod
     def can_handle(self, url: str) -> bool:
         """Check if this channel can handle this URL."""
         ...
 
-    def ordered_backends(self, config=None) -> List[str]:
+    def ordered_backends(self, config: Any = None) -> list[str]:
         """Candidate backends in probe order, honoring the user override.
 
         The config key `<channel>_backend` (env `<CHANNEL>_BACKEND`) moves the
@@ -58,7 +61,7 @@ class Channel(ABC):
                     break
         return candidates
 
-    def check(self, config=None) -> Tuple[str, str]:
+    def check(self, config: Any = None) -> tuple[str, str]:
         """
         Check if this channel's upstream tool is available.
         Returns (status, message) where status is 'ok'/'warn'/'off'/'error'.
@@ -68,3 +71,21 @@ class Channel(ABC):
         """
         self.active_backend = self.backends[0] if self.backends else "内置"
         return "ok", f"{'、'.join(self.backends) if self.backends else '内置'}"
+
+    def capability_readiness(
+        self,
+        status: str,
+        message: str,
+    ) -> dict[str, CapabilityReadiness]:
+        """Translate the channel result into explicit per-capability readiness."""
+
+        translated = {
+            "ok": "ready",
+            "warn": "degraded",
+            "off": "unavailable",
+            "error": "error",
+        }.get(status, "error")
+        return {
+            name: CapabilityReadiness(translated, self.active_backend, message)
+            for name in self.capabilities
+        }

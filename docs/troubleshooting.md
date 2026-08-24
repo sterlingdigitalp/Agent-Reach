@@ -20,17 +20,16 @@ agent-reach configure --from-browser chrome
 
 **症状：** `twitter search` 或其他命令返回错误
 
-**原因：** twitter-cli 需要 AUTH_TOKEN 和 CT0 环境变量才能访问 Twitter API。如果你的网络环境需要代理才能访问 x.com，需要配置代理。
+**原因：** twitter-cli 需要 `TWITTER_AUTH_TOKEN` 和 `TWITTER_CT0`。
+如果网络环境需要代理，代理凭据也应由系统凭据管理器注入。
 
 **解决方案：**
 
 ### 方案 1：设置环境变量代理
 
-```bash
-export HTTP_PROXY="http://user:pass@host:port"
-export HTTPS_PROXY="http://user:pass@host:port"
-twitter search "test" -n 1
-```
+在当前进程中从系统凭据管理器设置 `HTTP_PROXY`/`HTTPS_PROXY`，再运行
+`twitter search "test" -n 1`。不要把含用户名或密码的代理 URL 放进命令行、
+聊天或文档。
 
 ### 方案 2：使用全局代理工具
 
@@ -53,9 +52,12 @@ mcporter call 'exa.web_search_exa(query: "site:x.com 搜索词", numResults: 5)'
 ### 方案 4：检查认证
 
 ```bash
-twitter check
+twitter status
 ```
 
-> 如果返回 "Missing credentials"，需要设置 AUTH_TOKEN 和 CT0 环境变量。
+> 如果返回 `not_authenticated`，请用受保护的环境注入
+> `TWITTER_AUTH_TOKEN` 和 `TWITTER_CT0`，或运行
+> `agent-reach configure twitter-cookies` 使用隐藏提示。
 >
-> **Fallback：** 如果你已经安装了 bird CLI（`npm install -g @steipete/bird`），它也能正常工作。Agent Reach 会自动检测已安装的工具。
+> **Fallback：** 如果已经安装 bird CLI，Agent Reach 会自动检测。安装或升级
+> 外部工具属于单独的、需要审阅固定版本并明确授权的维护流程。

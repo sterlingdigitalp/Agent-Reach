@@ -22,6 +22,9 @@ class RSSChannel(Channel):
         except Exception as e:
             # 已安装但导入期崩溃（半残安装/版本冲突）→ 重装处方
             self.active_backend = None
-            return "error", f"feedparser 导入失败：{e}\n修复：pip install --force-reinstall feedparser"
+            return (
+                "error",
+                f"feedparser 导入失败：{e}\n修复：pip install --force-reinstall feedparser",
+            )
         self.active_backend = self.backends[0]
         return "ok", "可读取 RSS/Atom 源"

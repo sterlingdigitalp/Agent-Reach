@@ -66,8 +66,8 @@ def _run(cmd: List[str], timeout: int = 600) -> None:
     """
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        raise TranscribeError(f"{cmd[0]} timed out after {timeout}s")
+    except subprocess.TimeoutExpired as exc:
+        raise TranscribeError(f"{cmd[0]} timed out after {timeout}s") from exc
     if proc.returncode != 0:
         raise TranscribeError(
             f"{cmd[0]} failed (exit {proc.returncode}): {proc.stderr.strip()[:300]}"
@@ -170,7 +170,7 @@ def transcribe_chunk(
     """Transcribe one chunk via the named provider. Raises TranscribeError on failure."""
     if provider not in PROVIDERS:
         raise TranscribeError(f"unknown provider: {provider}")
-    cfg = config or Config()
+    cfg = config or Config(create=False)
     key = _provider_key(provider, cfg)
     if not key:
         raise NoProviderConfigured(
@@ -214,9 +214,10 @@ def transcribe(
     """Transcribe a URL or local file path. Returns the joined transcript text.
 
     `provider` is one of `auto` (groq → openai), `groq`, or `openai`.
-    `out_dir` defaults to a fresh temp directory; intermediate files stay there.
+    When ``out_dir`` is omitted, intermediate audio is deleted before return.
+    Supplying ``out_dir`` opts into retaining those files for debugging.
     """
-    cfg = config or Config()
+    cfg = config or Config(create=False)
     order = _provider_order(provider)
 
     # Validate at least one provider is configured before doing expensive work.
@@ -224,7 +225,20 @@ def transcribe(
         names = ", ".join(PROVIDERS[p]["key_field"] for p in order)
         raise NoProviderConfigured(f"no provider key configured (need one of: {names})")
 
-    work_dir = Path(out_dir) if out_dir else Path(tempfile.mkdtemp(prefix="transcribe-"))
+    if out_dir is None:
+        with tempfile.TemporaryDirectory(prefix="transcribe-") as temporary:
+            return _transcribe_in_directory(source, order, cfg, Path(temporary))
+    return _transcribe_in_directory(source, order, cfg, Path(out_dir))
+
+
+def _transcribe_in_directory(
+    source: str,
+    order: list[str],
+    config: Config,
+    work_dir: Path,
+) -> str:
+    """Run the transcription pipeline in *work_dir*."""
+
     work_dir.mkdir(parents=True, exist_ok=True)
 
     src_path = Path(source)
@@ -241,7 +255,7 @@ def transcribe(
 
     pieces: List[str] = []
     for chunk in chunks:
-        text = _transcribe_with_fallback(chunk, order, cfg)
+        text = _transcribe_with_fallback(chunk, order, config)
         pieces.append(text.strip())
     return "\n".join(p for p in pieces if p)
 

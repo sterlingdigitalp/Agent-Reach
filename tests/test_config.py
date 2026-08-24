@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for Agent Reach config module."""
 
-import os
-import tempfile
-from pathlib import Path
-
 import pytest
-import yaml
 
 from agent_reach.config import Config
 
@@ -21,7 +16,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -57,14 +52,15 @@ class TestConfig:
         assert tmp_config.get("to_delete") is None
 
     def test_is_configured(self, tmp_config):
-        assert not tmp_config.is_configured("exa_search")
-        tmp_config.set("exa_api_key", "test-key")
-        assert tmp_config.is_configured("exa_search")
+        assert not tmp_config.is_configured("twitter")
+        tmp_config.set("twitter_auth_token", "test-token")
+        tmp_config.set("twitter_ct0", "test-ct0")
+        assert tmp_config.is_configured("twitter")
 
     def test_get_configured_features(self, tmp_config):
         features = tmp_config.get_configured_features()
         assert isinstance(features, dict)
-        assert "exa_search" in features
+        assert "twitter" in features
         assert all(v is False for v in features.values())
 
     def test_to_dict_masks_sensitive(self, tmp_config):
@@ -77,6 +73,7 @@ class TestConfig:
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
+
         config_file = tmp_path / "secure_config.yaml"
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
@@ -86,3 +83,28 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_save_repairs_insecure_legacy_permissions(self, tmp_path):
+        import stat
+        import sys
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("secret_key: old\n", encoding="utf-8")
+        config_file.chmod(0o644)
+        Config(config_path=config_file).set("secret_key", "new")
+
+        if sys.platform != "win32":
+            assert config_file.stat().st_mode & 0o777 == 0o600
+            assert not config_file.stat().st_mode & (stat.S_IRGRP | stat.S_IROTH)
+
+    def test_read_only_config_does_not_create_parent(self, tmp_path):
+        config_file = tmp_path / "missing" / "config.yaml"
+        config = Config(config_path=config_file, create=False)
+        assert config.data == {}
+        assert not config_file.parent.exists()
+        with pytest.raises(RuntimeError, match="read-only"):
+            config.set("key", "value")
+
+    def test_schema_version_is_persisted(self, tmp_config):
+        tmp_config.set("key", "value")
+        assert tmp_config.get("schema_version") == Config.SCHEMA_VERSION

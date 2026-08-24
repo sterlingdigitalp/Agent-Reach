@@ -58,6 +58,7 @@ def test_channel_active_backend_set_by_check(monkeypatch, tmp_path):
 
     monkeypatch.setattr(urllib.request, "urlopen", _no_net)
     import agent_reach.channels.xueqiu as xueqiu_mod
+
     monkeypatch.setattr(xueqiu_mod, "_cookies_initialized", True)
     monkeypatch.setattr(xueqiu_mod._opener, "open", _no_net)
 

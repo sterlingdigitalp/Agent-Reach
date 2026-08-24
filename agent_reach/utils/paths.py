@@ -6,6 +6,8 @@ import os
 import sys
 from pathlib import Path
 
+from agent_reach.utils.security import atomic_write_private_text
+
 
 def get_ytdlp_config_dir() -> Path:
     """Return the recommended yt-dlp user config directory for this OS."""
@@ -43,3 +45,16 @@ def render_ytdlp_fix_command() -> str:
         f"grep -qxF -- '--js-runtimes node' '{config_path}' 2>/dev/null || "
         f"printf '%s\n' '--js-runtimes node' >> '{config_path}'"
     )
+
+
+def set_ytdlp_option(prefix: str, line: str) -> Path:
+    """Idempotently set one option in the platform-correct yt-dlp config."""
+
+    config_path = get_ytdlp_config_path()
+    existing = ""
+    if config_path.exists():
+        existing = config_path.read_text(encoding="utf-8", errors="replace")
+    kept = [item for item in existing.splitlines() if not item.strip().startswith(prefix)]
+    kept.append(line)
+    atomic_write_private_text(config_path, "\n".join(kept).rstrip() + "\n")
+    return config_path

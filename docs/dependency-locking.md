@@ -1,30 +1,17 @@
-# Dependency Locking Guide
+# Dependency policy
 
-Agent Reach uses `constraints.txt` as a reproducible dependency baseline.
+`constraints.txt` is the reviewed direct-dependency baseline used by CI. It is
+not a complete cross-platform lock: environment markers and transitive wheels
+can differ by Python version and operating system.
 
-## Why
+Runtime and development direct dependencies are pinned in
+`constraints.txt`; the build backend is pinned in `pyproject.toml`. CI tests
+Python 3.10–3.13, runs macOS/Windows smoke suites, audits the constraints, and
+emits a CycloneDX SBOM.
 
-- Keep local/CI dependency graph stable
-- Reduce "works on my machine" drift
-- Make regression results easier to compare
-
-## Install with constraints
-
-```bash
-pip install -c constraints.txt -e .[dev]
-```
-
-## Update workflow
-
-1. Update `pyproject.toml` dependency ranges as needed.
-2. Validate against latest compatible versions locally.
-3. Update pinned versions in `constraints.txt`.
-4. Run validation:
-
-```bash
-pytest -q
-ruff check agent_reach tests
-mypy agent_reach
-```
-
-5. Open PR with dependency and validation notes.
+For a deployment, resolve and retain a platform-specific lock with hashes
+(for example `uv lock`/`uv export --generate-hashes` or
+`pip-compile --generate-hashes`) and review the resulting transitive changes.
+External npm/pipx/OS tools have independent release streams and must be
+reviewed separately; Agent Reach does not claim that `constraints.txt` locks
+them.

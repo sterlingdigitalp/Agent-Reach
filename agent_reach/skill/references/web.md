@@ -6,10 +6,12 @@
 
 ```bash
 # 读取任意网页内容
-curl -s "https://r.jina.ai/URL"
+curl --silent --show-error --max-time 30 --max-filesize 1048576 \
+  --proto '=https' "https://r.jina.ai/URL"
 
 # 示例
-curl -s "https://r.jina.ai/https://example.com/article"
+curl --silent --show-error --max-time 30 --max-filesize 1048576 \
+  --proto '=https' "https://r.jina.ai/https://example.com/article"
 ```
 
 **适用场景**: 大多数网页可以直接用 Jina Reader 读取。

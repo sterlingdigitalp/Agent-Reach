@@ -8,12 +8,10 @@ Usage:
     agent-reach configure --from-browser chrome
 """
 
-import sys
-from typing import Dict, List, Optional, Tuple
-
+from typing import Any, Dict, List, Tuple
 
 # Platform cookie specs: (platform_name, domain_pattern, needed_cookies)
-PLATFORM_SPECS = [
+PLATFORM_SPECS: list[dict[str, Any]] = [
     {
         "name": "Twitter/X",
         "domains": [".x.com", ".twitter.com"],
@@ -44,7 +42,7 @@ PLATFORM_SPECS = [
 def extract_all(browser: str = "chrome") -> Dict[str, dict]:
     """
     Extract cookies for all supported platforms from the specified browser.
-    
+
     Returns:
         {
             "twitter": {"auth_token": "xxx", "ct0": "yyy"},
@@ -56,6 +54,7 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
     use_rookiepy = False
     try:
         import rookiepy
+
         use_rookiepy = True
     except ImportError:
         try:
@@ -70,9 +69,7 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
     browser = browser.lower()
     supported = ["chrome", "firefox", "edge", "brave", "opera"]
     if browser not in supported:
-        raise ValueError(
-            f"Unsupported browser: {browser}. Supported: {', '.join(supported)}"
-        )
+        raise ValueError(f"Unsupported browser: {browser}. Supported: {', '.join(supported)}")
 
     if use_rookiepy:
         # rookiepy returns list of dicts with name/value/domain/path keys
@@ -85,12 +82,14 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
                 "opera": rookiepy.opera,
             }
             raw_cookies = browser_funcs[browser]()
+
             # Wrap into objects with .name, .value, .domain for compatibility
             class _Cookie:
                 def __init__(self, d):
                     self.name = d.get("name", "")
                     self.value = d.get("value", "")
                     self.domain = d.get("domain", "")
+
             cookie_jar = [_Cookie(c) for c in raw_cookies]
         except Exception as e:
             raise RuntimeError(
@@ -113,7 +112,7 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
                 f"Make sure {browser} is closed and you have permission."
             )
 
-    results = {}
+    results: dict[str, dict[str, str]] = {}
 
     for spec in PLATFORM_SPECS:
         platform_cookies = {}
@@ -122,8 +121,7 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
         for cookie in cookie_jar:
             # Check if cookie belongs to this platform
             domain_match = any(
-                cookie.domain.endswith(d) or cookie.domain == d.lstrip(".")
-                for d in spec["domains"]
+                cookie.domain.endswith(d) or cookie.domain == d.lstrip(".") for d in spec["domains"]
             )
             if not domain_match:
                 continue
@@ -137,9 +135,7 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
         if spec["cookies"] is None:
             # Grab all as header string
             if all_cookies_for_domain:
-                cookie_str = "; ".join(
-                    f"{c.name}={c.value}" for c in all_cookies_for_domain
-                )
+                cookie_str = "; ".join(f"{c.name}={c.value}" for c in all_cookies_for_domain)
                 results[spec["config_key"]] = {"cookie_string": cookie_str}
         else:
             if platform_cookies:
@@ -149,25 +145,20 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
 
 
 def _open_owner_only(path: str):
-    """Open *path* for writing, atomically creating it with mode 0o600.
+    """Return a private temporary text stream that atomically replaces *path*."""
 
-    Mirrors the pattern used by Config.save() in config.py: O_WRONLY|O_CREAT|
-    O_TRUNC + an explicit mode argument so the file is never briefly
-    world-readable between open() and a later os.chmod(). On Windows (or any
-    OS that rejects the open flags) we fall back to a plain open().
-    """
-    import os
-    import stat
+    from contextlib import contextmanager
+    from io import StringIO
 
-    try:
-        fd = os.open(
-            path,
-            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-            stat.S_IRUSR | stat.S_IWUSR,  # 0o600
-        )
-        return os.fdopen(fd, "w", encoding="utf-8")
-    except OSError:
-        return open(path, "w", encoding="utf-8")
+    from agent_reach.utils.security import atomic_write_private_text
+
+    @contextmanager
+    def private_stream():
+        buffer = StringIO()
+        yield buffer
+        atomic_write_private_text(path, buffer.getvalue())
+
+    return private_stream()
 
 
 def _sync_xfetch_session(auth_token: str, ct0: str) -> None:
@@ -225,7 +216,7 @@ _sync_bird_credentials = _sync_bird_env
 def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
     """
     Extract cookies and configure all found platforms.
-    
+
     Returns list of (platform_name, success, message) tuples.
     """
     results_list = []
@@ -236,9 +227,14 @@ def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
         return [("Browser", False, str(e))]
 
     if not extracted:
-        return [("All platforms", False,
-                 f"No platform cookies found in {browser}. "
-                 f"Make sure you're logged into Twitter, XiaoHongShu, etc. in {browser}.")]
+        return [
+            (
+                "All platforms",
+                False,
+                f"No platform cookies found in {browser}. "
+                f"Make sure you're logged into Twitter, XiaoHongShu, etc. in {browser}.",
+            )
+        ]
 
     # Configure each found platform
     if "twitter" in extracted:
@@ -252,28 +248,34 @@ def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
         else:
             found = ", ".join(tc.keys())
             missing = [k for k in ["auth_token", "ct0"] if k not in tc]
-            results_list.append(("Twitter/X", False,
-                                 f"Found {found}, but missing: {', '.join(missing)}. "
-                                 f"Make sure you're logged into x.com in {browser}."))
+            results_list.append(
+                (
+                    "Twitter/X",
+                    False,
+                    f"Found {found}, but missing: {', '.join(missing)}. "
+                    f"Make sure you're logged into x.com in {browser}.",
+                )
+            )
 
     if "xhs" in extracted:
-        cookie_str = extracted["xhs"].get("cookie_string", "")
-        if cookie_str:
-            config.set("xhs_cookie", cookie_str)
-            n_cookies = len(cookie_str.split(";"))
-            results_list.append(("XiaoHongShu", True, f"{n_cookies} cookies"))
+        results_list.append(
+            (
+                "XiaoHongShu",
+                False,
+                "cookies found but not persisted: use OpenCLI's browser session or "
+                "xiaohongshu-mcp's login flow",
+            )
+        )
 
     if "bilibili" in extracted:
-        bc = extracted["bilibili"]
-        if "SESSDATA" in bc:
-            config.set("bilibili_sessdata", bc["SESSDATA"])
-            if "bili_jct" in bc:
-                config.set("bilibili_csrf", bc["bili_jct"])
-            results_list.append(("Bilibili", True, "SESSDATA" +
-                                 (" + bili_jct" if "bili_jct" in bc else "")))
-        else:
-            results_list.append(("Bilibili", False,
-                                 f"No SESSDATA found. Make sure you're logged into bilibili.com in {browser}."))
+        results_list.append(
+            (
+                "Bilibili",
+                False,
+                "cookies found but not persisted: current bili-cli/OpenCLI backends "
+                "do not consume Agent Reach cookie storage",
+            )
+        )
 
     if "xueqiu" in extracted:
         cookie_str = extracted["xueqiu"].get("cookie_string", "")
@@ -283,8 +285,13 @@ def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
             n_cookies = len(cookie_str.split(";"))
             results_list.append(("Xueqiu", True, f"{n_cookies} cookies (含 xq_a_token)"))
         elif cookie_str:
-            results_list.append(("Xueqiu", False,
-                                 f"找到 {len(cookie_str.split(';'))} 个 Cookie 但缺少 xq_a_token，"
-                                 f"请先在 {browser} 中登录 xueqiu.com"))
+            results_list.append(
+                (
+                    "Xueqiu",
+                    False,
+                    f"找到 {len(cookie_str.split(';'))} 个 Cookie 但缺少 xq_a_token，"
+                    f"请先在 {browser} 中登录 xueqiu.com",
+                )
+            )
 
     return results_list

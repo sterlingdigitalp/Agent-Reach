@@ -15,13 +15,33 @@ not just file existence.
 
 import shutil
 import subprocess
-from dataclasses import dataclass
-from typing import Optional, Sequence
+from collections.abc import Iterator, Mapping
+from concurrent.futures import Future
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
+from threading import Lock
+from typing import Sequence
 
 from agent_reach.utils.process import utf8_subprocess_env
 
 #: Exit codes shells use for "found but not executable" / "not found".
 _BROKEN_EXIT_CODES = (126, 127)
+_ProbeKey = tuple[object, ...]
+
+
+@dataclass
+class _ProbeSessionCache:
+    """Thread-safe single-flight cache shared by one doctor request."""
+
+    lock: Lock = field(default_factory=Lock)
+    results: dict[_ProbeKey, Future["ProbeResult"]] = field(default_factory=dict)
+
+
+_PROBE_CACHE: ContextVar[_ProbeSessionCache | None] = ContextVar(
+    "agent_reach_probe_cache",
+    default=None,
+)
 
 
 @dataclass
@@ -49,7 +69,8 @@ def probe_command(
     args: Sequence[str] = ("--version",),
     timeout: int = 10,
     retries: int = 0,
-    package: Optional[str] = None,
+    package: str | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> ProbeResult:
     """Actually execute `cmd *args` and classify the result.
 
@@ -64,19 +85,47 @@ def probe_command(
     if not path:
         return ProbeResult("missing")
 
-    last: Optional[ProbeResult] = None
-    for _ in range(retries + 1):
-        last = _run_once(path, args, timeout, package or cmd)
-        if last.ok:
-            return last
-        # missing/broken won't heal between retries — only transient
-        # failures (timeout/error) are worth a second attempt
-        if last.status in ("missing", "broken"):
-            return last
-    return last
+    cache = _PROBE_CACHE.get()
+    key = (path, tuple(args), timeout, retries, package, id(env) if env is not None else None)
+    future: Future[ProbeResult] | None = None
+    owns_probe = True
+    if cache is not None:
+        with cache.lock:
+            future = cache.results.get(key)
+            if future is None:
+                future = Future()
+                cache.results[key] = future
+            else:
+                owns_probe = False
+        if not owns_probe:
+            return future.result()
+
+    try:
+        last = ProbeResult("error", hint="probe did not run")
+        for _ in range(retries + 1):
+            last = _run_once(path, args, timeout, package or cmd, env)
+            if last.ok:
+                break
+            # missing/broken won't heal between retries — only transient
+            # failures (timeout/error) are worth a second attempt
+            if last.status in ("missing", "broken"):
+                break
+        if future is not None:
+            future.set_result(last)
+        return last
+    except BaseException as exc:
+        if future is not None:
+            future.set_exception(exc)
+        raise
 
 
-def _run_once(path: str, args: Sequence[str], timeout: int, package: str) -> ProbeResult:
+def _run_once(
+    path: str,
+    args: Sequence[str],
+    timeout: int,
+    package: str,
+    env: Mapping[str, str] | None,
+) -> ProbeResult:
     try:
         r = subprocess.run(
             [path, *args],
@@ -84,7 +133,7 @@ def _run_once(path: str, args: Sequence[str], timeout: int, package: str) -> Pro
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
-            env=utf8_subprocess_env(),
+            env=utf8_subprocess_env(env),
         )
     except FileNotFoundError:
         # which() found it but exec failed: the shebang interpreter is gone
@@ -101,3 +150,14 @@ def _run_once(path: str, args: Sequence[str], timeout: int, package: str) -> Pro
     if r.returncode != 0:
         return ProbeResult("error", output=output.strip())
     return ProbeResult("ok", output=output.strip())
+
+
+@contextmanager
+def probe_session() -> Iterator[None]:
+    """Cache identical side-effect-free probes for one doctor request."""
+
+    token = _PROBE_CACHE.set(_ProbeSessionCache())
+    try:
+        yield
+    finally:
+        _PROBE_CACHE.reset(token)

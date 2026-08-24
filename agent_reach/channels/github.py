@@ -2,6 +2,7 @@
 """GitHub — check if gh CLI is available."""
 
 from agent_reach.probe import probe_command
+from agent_reach.utils.urls import host_matches
 
 from .base import Channel
 
@@ -11,14 +12,21 @@ class GitHubChannel(Channel):
     description = "GitHub 仓库和代码"
     backends = ["gh CLI"]
     tier = 0
+    capabilities = ("read", "search")
 
     def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-        return "github.com" in urlparse(url).netloc.lower()
+        return host_matches(url, "github.com")
 
     def check(self, config=None):
         # 真跑 gh auth status 探活。注意：未登录时 rc!=0 是正常业务态（warn），不是 error。
-        probe = probe_command("gh", ["auth", "status"], timeout=10, package="gh")
+        env = config.subprocess_env("github_token") if config else None
+        probe = probe_command(
+            "gh",
+            ["auth", "status"],
+            timeout=10,
+            package="gh",
+            env=env,
+        )
         if probe.status == "missing":
             self.active_backend = None
             return "warn", "gh CLI 未安装。安装：https://cli.github.com"
@@ -36,7 +44,7 @@ class GitHubChannel(Channel):
             return "warn", "gh CLI 状态检查超时，运行 gh auth status 查看详情"
         if probe.ok:
             self.active_backend = "gh CLI"
-            return "ok", "完整可用（读取、搜索、Fork、Issue、PR 等）"
+            return "ok", "只读能力可用（仓库、代码、Issue、PR、Release 元数据）"
         # rc != 0：gh 活着但未认证（gh auth status 的正常业务态）
         self.active_backend = "gh CLI"
         return "warn", "gh CLI 已安装但未认证。运行 gh auth login 可解锁完整功能"

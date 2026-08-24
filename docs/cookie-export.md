@@ -1,42 +1,29 @@
-# Cookie Export Guide — For Server Users
+# Cookie handling
 
-Your Agent is on a server and can't access your browser directly.
-Here's how to export cookies from your local computer — **fastest method first**.
+Cookies are account-equivalent secrets. Do not paste them into agent chat,
+command arguments, shell history, tickets, logs, or screenshots.
 
-## Method 1: Cookie-Editor Extension (Recommended — 30 seconds per site)
+Prefer an upstream tool's own browser-session/login flow:
 
-1. Install **Cookie-Editor** for Chrome: https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm
-   (Also available for Firefox, Edge)
+- Twitter desktop: OpenCLI, or export only `auth_token` and `ct0` locally.
+- XiaoHongShu: OpenCLI on desktop or xiaohongshu-mcp's QR flow on a server.
+- Bilibili: bili-cli/OpenCLI login flow.
+- Xueqiu: local `configure --from-browser` on the machine that owns the browser.
 
-2. Go to the website (e.g. https://x.com) and make sure you're logged in
+For Twitter automation, pass the exported header over stdin:
 
-3. Click the Cookie-Editor icon in your toolbar
-
-4. Click **Export** → **Header String**
-
-5. Paste the result to your Agent
-
-That's it! Your Agent will run:
 ```bash
-agent-reach configure twitter-cookies <your_pasted_string>
+printf '%s' "$TWITTER_COOKIE_HEADER" | \
+  agent-reach configure twitter-cookies --stdin
 ```
 
-### Sites to export:
+For a local file, restrict its permissions first:
 
-| Site | URL to visit | What to tell Agent |
-|------|-------------|-------------------|
-| Twitter/X | https://x.com | "Here are my Twitter cookies: [paste]" |
-| XiaoHongShu | https://www.xiaohongshu.com | "Here are my XHS cookies: [paste]" |
-| Bilibili | https://www.bilibili.com | "Here are my Bilibili cookies: [paste]" |
+```bash
+chmod 600 /secure/path/twitter-cookie.txt
+agent-reach configure twitter-cookies --file /secure/path/twitter-cookie.txt
+```
 
-## Method 2: Manual (No extension needed)
-
-1. Open the site in Chrome, make sure you're logged in
-2. Press **F12** (or right-click → Inspect)
-3. Click the **Network** tab
-4. Refresh the page (F5)
-5. Click any request in the list
-6. In the right panel, scroll to **Request Headers**
-7. Find the line starting with `Cookie:`
-8. Copy the entire value after `Cookie: `
-9. Paste to your Agent
+Delete the export after configuration. Agent Reach intentionally does not
+persist XiaoHongShu or Bilibili browser cookies because current upstream
+backends do not consume those config keys.

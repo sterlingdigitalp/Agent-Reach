@@ -24,16 +24,14 @@ from agent_reach.probe import probe_command
 
 OPENCLI_PACKAGE = "@jackwener/opencli"
 OPENCLI_EXTENSION_ID = "ildkmabpimmkaediidaifkhjpohdnifk"
-OPENCLI_EXTENSION_URL = (
-    f"https://chromewebstore.google.com/detail/opencli/{OPENCLI_EXTENSION_ID}"
-)
+OPENCLI_EXTENSION_URL = f"https://chromewebstore.google.com/detail/opencli/{OPENCLI_EXTENSION_ID}"
 
 #: Chrome-family profile roots that contain <Profile>/Extensions/<id>/
 _CHROME_PROFILE_ROOTS = (
     "~/Library/Application Support/Google/Chrome",  # macOS Chrome
-    "~/Library/Application Support/Chromium",       # macOS Chromium
-    "~/.config/google-chrome",                      # Linux Chrome
-    "~/.config/chromium",                           # Linux Chromium
+    "~/Library/Application Support/Chromium",  # macOS Chromium
+    "~/.config/google-chrome",  # Linux Chrome
+    "~/.config/chromium",  # Linux Chromium
 )
 
 
@@ -72,8 +70,10 @@ class OpenCLIStatus:
         A live connection counts, and so does an installed-but-sleeping
         extension: its service worker wakes on the first real command.
         """
-        return self.installed and not self.broken and (
-            self.extension_connected or self.extension_installed
+        return (
+            self.installed
+            and not self.broken
+            and (self.extension_connected or self.extension_installed)
         )
 
 
@@ -90,7 +90,7 @@ def opencli_status(timeout: int = 10) -> OpenCLIStatus:
             broken=True,
             hint=(
                 "opencli 命令存在但无法执行（node 环境损坏），重装：\n"
-                f"  npm install -g {OPENCLI_PACKAGE}"
+                f"  review and reinstall an exact {OPENCLI_PACKAGE}@VERSION release"
             ),
         )
 

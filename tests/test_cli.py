@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 import requests
+
 import agent_reach.cli as cli
 from agent_reach.cli import main
 
@@ -27,11 +28,58 @@ class TestCLI:
         assert exc_info.value.code == 0
 
     def test_doctor_runs(self, capsys):
-        with patch("sys.argv", ["agent-reach", "doctor"]):
-            main()
+        results = {
+            "web": {
+                "status": "ok",
+                "name": "Web",
+                "message": "ready",
+                "tier": 0,
+                "backends": ["Jina Reader"],
+                "active_backend": "Jina Reader",
+                "capabilities": {},
+            }
+        }
+        with patch("agent_reach.doctor.check_all", return_value=results):
+            with patch("sys.argv", ["agent-reach", "doctor"]):
+                main()
         captured = capsys.readouterr()
         assert "Agent Reach" in captured.out
         assert "✅" in captured.out
+
+    def test_doctor_is_read_only(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        monkeypatch.setenv("HOME", str(home))
+        with patch("agent_reach.doctor.check_all", return_value={}):
+            with patch("sys.argv", ["agent-reach", "doctor", "--json"]):
+                main()
+        assert not home.exists()
+
+    def test_install_dry_run_is_zero_write(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setattr(cli, "_detect_environment", lambda: "local")
+        with patch("sys.argv", ["agent-reach", "install", "--dry-run"]):
+            main()
+        assert not home.exists()
+
+    def test_install_requires_explicit_yes_for_mutation(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setattr(cli, "_detect_environment", lambda: "local")
+        monkeypatch.setattr("agent_reach.doctor.check_all", lambda _config: {})
+        with patch("sys.argv", ["agent-reach", "install"]):
+            main()
+        assert not home.exists()
+
+    def test_secret_argv_is_rejected(self, capsys):
+        with patch(
+            "sys.argv",
+            ["agent-reach", "configure", "groq-key", "gsk_not_allowed"],
+        ):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 2
+        assert "Refusing a secret" in capsys.readouterr().err
 
     def test_transcribe_command_prints_text(self, capsys):
         with patch("agent_reach.transcribe.transcribe", return_value="hello transcript"):
@@ -100,6 +148,25 @@ class TestCLI:
         monkeypatch.setattr(cli, "_detect_environment", lambda: "server")
         cli._install_reddit_deps()
         assert calls == ["rdt"]
+
+    def test_unpinned_external_tools_are_never_auto_installed(self, monkeypatch):
+        monkeypatch.setattr(shutil, "which", lambda _name: None)
+        monkeypatch.setattr(
+            "agent_reach.backends.opencli.opencli_status",
+            lambda: type(
+                "Status",
+                (),
+                {"installed": False, "broken": False, "ready": False, "hint": ""},
+            )(),
+        )
+
+        with patch("subprocess.run") as subprocess_run:
+            cli._install_mcporter()
+            cli._install_twitter_deps()
+            cli._install_bili_deps()
+            cli._install_opencli_deps()
+
+        subprocess_run.assert_not_called()
 
 
 class TestCheckUpdateRetry:
@@ -204,6 +271,7 @@ class TestVersionCompare:
 class TestWatchVersionCompare:
     def test_watch_does_not_prompt_downgrade(self, monkeypatch, capsys):
         """watch 与 check-update 同语义:本地领先远端 release 时不提示更新。"""
+
         class R:
             status_code = 200
             headers = {}
@@ -215,8 +283,16 @@ class TestWatchVersionCompare:
         monkeypatch.setattr(cli, "_github_get_with_retry", lambda *a, **k: (R(), None, 1))
         monkeypatch.setattr(
             "agent_reach.doctor.check_all",
-            lambda config: {"web": {"status": "ok", "name": "任意网页", "message": "ok",
-                            "tier": 0, "backends": ["Jina Reader"], "active_backend": "Jina Reader"}},
+            lambda config: {
+                "web": {
+                    "status": "ok",
+                    "name": "任意网页",
+                    "message": "ok",
+                    "tier": 0,
+                    "backends": ["Jina Reader"],
+                    "active_backend": "Jina Reader",
+                }
+            },
         )
         cli._cmd_watch()
         out = capsys.readouterr().out

@@ -6,7 +6,7 @@ from agent_reach.probe import probe_command
 from .base import Channel
 
 #: mcporter 是 npm 包，断链处方与默认的 pipx/uv 不同
-_MCPORTER_BROKEN_HINT = "mcporter 无法执行（node 环境损坏），重装：\n  npm install -g mcporter"
+_MCPORTER_BROKEN_HINT = "mcporter 无法执行（node 环境损坏）；请审阅并重装固定的 mcporter@VERSION"
 
 
 class ExaSearchChannel(Channel):
@@ -24,7 +24,7 @@ class ExaSearchChannel(Channel):
         if probe.status == "missing":
             return "off", (
                 "需要 mcporter + Exa MCP。安装：\n"
-                "  npm install -g mcporter\n"
+                "  审阅并安装固定的 mcporter@VERSION\n"
                 "  mcporter config add exa https://mcp.exa.ai/mcp"
             )
         if probe.status == "broken":
@@ -32,9 +32,23 @@ class ExaSearchChannel(Channel):
         if not probe.ok:  # timeout / error
             return "error", f"mcporter 执行异常：{probe.hint or probe.output or probe.status}"
         if "exa" in probe.output.lower():
-            self.active_backend = self.backends[0]
-            return "ok", "全网语义搜索可用（免费，无需 API Key）"
+            live = probe_command(
+                "mcporter",
+                [
+                    "call",
+                    'exa.web_search_exa(query: "agent reach health probe", numResults: 1)',
+                    "--timeout",
+                    "10000",
+                ],
+                timeout=15,
+                package="mcporter",
+            )
+            if live.ok:
+                self.active_backend = self.backends[0]
+                return "ok", "全网语义搜索已通过真实只读查询（免费，无需 API Key）"
+            return "warn", (
+                f"Exa 已配置，但真实只读查询失败：{live.hint or live.output or live.status}"
+            )
         return "off", (
-            "mcporter 已装但 Exa 未配置。运行：\n"
-            "  mcporter config add exa https://mcp.exa.ai/mcp"
+            "mcporter 已装但 Exa 未配置。运行：\n  mcporter config add exa https://mcp.exa.ai/mcp"
         )

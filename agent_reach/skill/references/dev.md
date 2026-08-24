@@ -4,34 +4,26 @@ GitHub CLI
 
 ## GitHub (gh CLI)
 
-GitHub 官方命令行工具，用于仓库、Issue、PR、Actions、Release 以及 API 访问。
+本 fetch-only skill 只使用 GitHub CLI 的读取与搜索命令。
 
 ```bash
-# 认证
-gh auth login
+# 查看认证状态（只读）
 gh auth status
 
 # 搜索
 gh search repos "query" --sort stars --limit 10
 gh search code "query" --language python
 
-# 仓库
+# 仓库（只读）
 gh repo view owner/repo
-gh repo clone owner/repo
-gh repo create my-repo --private
-gh repo fork owner/repo
-gh repo fork owner/repo --clone
-gh repo sync owner/repo
 
-# Issues
+# Issues（只读）
 gh issue list -R owner/repo --state open
 gh issue view 123 -R owner/repo
-gh issue create -R owner/repo --title "Title" --body "Body"
 
-# Pull Requests
+# Pull Requests（只读）
 gh pr list -R owner/repo --state open
 gh pr view 123 -R owner/repo
-gh pr create -R owner/repo --title "Title" --body "Body"
 gh pr checks 123 --repo owner/repo
 
 # Actions / CI
@@ -42,7 +34,6 @@ gh workflow list --repo owner/repo
 
 # Releases
 gh release list -R owner/repo
-gh release create v1.0.0
 
 # API
 gh api /user
@@ -52,6 +43,8 @@ gh api repos/owner/repo
 gh issue list --repo owner/repo --json number,title --jq '.[] | "\(.number): \(.title)"'
 ```
 
+> 创建/修改仓库、Issue、PR、Release 等写操作不属于 Agent Reach。只有用户明确授权后，
+> 才能切换到独立的 GitHub 写操作工作流。
 
 ## 选择指南
 

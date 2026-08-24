@@ -6,6 +6,39 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [Unreleased]
+
+### Security and correctness
+
+- Made doctor, dry-run, safe mode, and default install planning strictly read-only.
+- Added explicit `install --yes` consent; removed automatic privileged/system installation.
+- Added atomic owner-only credential rewrites that repair legacy 0644 files.
+- Removed secret argv flows in favor of hidden input, stdin, or files.
+- Connected Twitter, GitHub, and YouTube configuration to real upstream consumers;
+  stopped persisting unsupported XHS/Bilibili cookie keys.
+- Removed known-vulnerable dependency pins and the unused python-dotenv/Playwright surfaces.
+- Hardened the packaged skill against prompt injection, credential disclosure,
+  lookalike hosts, unbounded output, and unauthorized writes.
+
+### Architecture and release gates
+
+- Added typed per-capability health, request-scoped channels, shared probe caching,
+  concurrent checks, and an aggregate doctor deadline.
+- Removed residual V2EX/Xueqiu/Web wrapper methods.
+- Replaced obsolete integration/upstream-sync scripts with a hermetic local release gate.
+- Added Ruff, format, mypy, coverage, shellcheck, vulnerability, secret, SBOM,
+  cross-platform, and wheel gates to CI.
+
+## [1.5.0] - 2026-06
+
+- Completed the capability-layer transition: agents call upstream tools directly.
+- Added 13-channel ordered backend health routing and status-only MCP integration.
+
+## [1.4.0] - 2026-04
+
+- Added OpenCLI as a shared desktop/browser-session backend.
+- Added Xiaoyuzhou transcription and expanded backend health probes.
+
 ## [1.3.1] - 2026-03-27
 
 ### 🐛 Bug Fixes / 修复

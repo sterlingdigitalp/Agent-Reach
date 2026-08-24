@@ -12,7 +12,9 @@ YouTube backend; it just no longer serves bilibili.
 import json
 import urllib.request
 
+from agent_reach.models import CapabilityReadiness
 from agent_reach.probe import probe_command
+from agent_reach.utils.urls import host_matches
 
 from .base import Channel
 
@@ -37,11 +39,10 @@ class BilibiliChannel(Channel):
     description = "B站视频、字幕和搜索"
     backends = ["bili-cli", "OpenCLI", "B站搜索 API"]
     tier = 1
+    capabilities = ("metadata", "search", "subtitles")
 
     def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-        d = urlparse(url).netloc.lower()
-        return "bilibili.com" in d or "b23.tv" in d
+        return host_matches(url, "bilibili.com", "b23.tv")
 
     def check(self, config=None):
         """Probe candidates in order; first fully-usable backend wins."""
@@ -75,7 +76,7 @@ class BilibiliChannel(Channel):
 
         return "off", (
             "没有可用的 B站后端（搜索 API 也不可达，可能是网络问题）。推荐：\n"
-            "  pipx install bilibili-cli（搜索/热门/视频详情，无需登录）\n"
+            "  审阅固定版本后安装 bili-cli（搜索/热门/视频详情，无需登录）\n"
             "  或桌面装 OpenCLI（额外解锁字幕）：agent-reach install --channels opencli"
         )
 
@@ -113,7 +114,19 @@ class BilibiliChannel(Channel):
         """Zero-dependency search API fallback. None = unreachable."""
         if not _search_api_ok():
             return None
-        return "ok", (
+        return "warn", (
             "B站搜索 API 可达（仅搜索，curl 直连）。"
-            "完整功能建议安装 bili-cli：pipx install bilibili-cli"
+            "完整功能需要用户另行审阅并安装固定版本的 bili-cli"
         )
+
+    def capability_readiness(self, status, message):
+        if self.active_backend == "B站搜索 API":
+            return {
+                "metadata": CapabilityReadiness("unavailable", None, message),
+                "search": CapabilityReadiness("ready", self.active_backend, message),
+                "subtitles": CapabilityReadiness("unavailable", None, message),
+            }
+        readiness = super().capability_readiness(status, message)
+        if self.active_backend == "bili-cli" and status == "ok":
+            readiness["subtitles"] = CapabilityReadiness("unavailable", None, message)
+        return readiness

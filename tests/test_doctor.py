@@ -8,8 +8,9 @@ from agent_reach.config import Config
 
 
 class _StubChannel:
-    def __init__(self, name, description, tier, status, message, backends=None,
-                 active_backend=None):
+    def __init__(
+        self, name, description, tier, status, message, backends=None, active_backend=None
+    ):
         self.name = name
         self.description = description
         self.tier = tier
@@ -33,8 +34,9 @@ class TestDoctor:
             doctor,
             "get_all_channels",
             lambda: [
-                _StubChannel("web", "网页", 0, "ok", "可抓取网页", ["requests"],
-                             active_backend="requests"),
+                _StubChannel(
+                    "web", "网页", 0, "ok", "可抓取网页", ["requests"], active_backend="requests"
+                ),
                 _StubChannel("github", "GitHub", 0, "warn", "gh 未安装", ["gh"]),
                 _StubChannel("exa_search", "全网语义搜索", 1, "off", "mcporter 未配置", ["Exa"]),
             ],
@@ -42,32 +44,12 @@ class TestDoctor:
 
         results = doctor.check_all(tmp_config)
 
-        assert results == {
-            "web": {
-                "status": "ok",
-                "name": "网页",
-                "message": "可抓取网页",
-                "tier": 0,
-                "backends": ["requests"],
-                "active_backend": "requests",
-            },
-            "github": {
-                "status": "warn",
-                "name": "GitHub",
-                "message": "gh 未安装",
-                "tier": 0,
-                "backends": ["gh"],
-                "active_backend": None,
-            },
-            "exa_search": {
-                "status": "off",
-                "name": "全网语义搜索",
-                "message": "mcporter 未配置",
-                "tier": 1,
-                "backends": ["Exa"],
-                "active_backend": None,
-            },
-        }
+        assert list(results) == ["web", "github", "exa_search"]
+        assert results["web"]["status"] == "ok"
+        assert results["web"]["active_backend"] == "requests"
+        assert results["web"]["capabilities"]["read"]["status"] == "ready"
+        assert results["github"]["capabilities"]["read"]["status"] == "degraded"
+        assert results["exa_search"]["capabilities"]["read"]["status"] == "unavailable"
 
     def test_format_report(self):
         report = doctor.format_report(
@@ -98,6 +80,7 @@ class TestDoctor:
 
         # Strip Rich markup tags for assertion (PR #170 added [bold], [yellow] etc.)
         import re
+
         plain = re.sub(r"\[[^\]]*\]", "", report)
         assert "Agent Reach" in plain
         assert "装好即用：" in plain

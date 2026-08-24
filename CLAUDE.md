@@ -1,44 +1,42 @@
-# CLAUDE.md
+# Repository guidance
 
-## Project
-Agent Reach — Python CLI + library that gives AI agents read/search access to 13 internet platforms.
-Positioning: installer + doctor + config tool. NOT a wrapper — after install, agents call upstream tools directly.
-Repo: github.com/Panniantong/Agent-Reach | License: MIT | Version: 1.5.0
+Agent Reach is a Python capability layer for upstream internet tools. Preserve
+the boundary: Agent Reach installs, configures, diagnoses, and documents
+backends; agents invoke those backends directly. Do not add unified
+read/search routing or copied platform fetchers.
 
-## Commands
-- `pip install -e .` — Dev install
-- `pytest tests/ -v` — All tests
-- `pytest tests/test_cli.py -v` — CLI tests only
-- `bash test.sh` — Full integration test (creates venv, installs, runs doctor + channel tests)
-- `python -m agent_reach.cli doctor` — Run diagnostics
-- `python -m agent_reach.cli install --env=auto` — Auto-configure
+## Local gates
 
-## Structure
-- `agent_reach/cli.py` — CLI entry point (argparse)
-- `agent_reach/core.py` — Core read/search routing logic
-- `agent_reach/config.py` — Config management (YAML, env vars)
-- `agent_reach/doctor.py` — Diagnostics engine
-- `agent_reach/channels/` — One file per platform (twitter.py, reddit.py, youtube.py, etc.)
-- `agent_reach/channels/base.py` — Base channel class (all channels inherit from this)
-- `agent_reach/integrations/mcp_server.py` — MCP server integration
-- `agent_reach/skill/` — OpenClaw skill files
-- `agent_reach/guides/` — Usage guides
-- `tests/` — pytest tests
-- `config/mcporter.json` — MCP tool config
+Install the pinned development set, then run:
 
-## Conventions
-- Python 3.10+ with type hints
-- Each channel is a single file in `channels/`, inherits from `BaseChannel`
-- Channel contract: must implement `can_handle(url)`, `read(url)`, `search(query)`, `check()` methods
-- Use `loguru` for logging, `rich` for CLI output
-- Commit format: `type(scope): message` (one commit = one thing)
-- All upstream tool calls go through public API/CLI, never hack internals
+```bash
+python -m pip install -c constraints.txt -e ".[dev]"
+python -m pytest -q
+python -m ruff check agent_reach tests
+python -m ruff format --check agent_reach tests
+python -m mypy agent_reach
+bash -n test.sh agent_reach/scripts/transcribe_xiaoyuzhou.sh
+shellcheck test.sh agent_reach/scripts/transcribe_xiaoyuzhou.sh
+python -m pip_audit -r constraints.txt --progress-spinner off
+```
 
-## Rules
-- NEVER modify upstream open source projects' source code
-- Agent Reach is a "glue layer" — only route and call, don't reimagine
-- Version in THREE places must match: `pyproject.toml`, `__init__.py`, `tests/test_cli.py`
-- Always new branch for changes, PR to main, never push to main directly
-- Run `pytest tests/ -v` before committing — all tests must pass
-- Cookie-based auth (Twitter, XHS): use Cookie-Editor export method only, no QR scan
-- XHS login: Cookie-Editor browser export only (QR will hang)
+`bash test.sh` runs the complete checkout-based release gate. It never installs
+remote `main` or invokes removed wrapper commands.
+
+## Architecture
+
+- `agent_reach/channels/`: one health adapter per platform.
+- `agent_reach/backends/`: shared multi-platform runtimes such as OpenCLI.
+- `agent_reach/doctor.py`: bounded, concurrent, read-only health aggregation.
+- `agent_reach/config.py`: schema-versioned owner-only local configuration.
+- `agent_reach/skill/`: packaged fetch-only runtime instructions.
+- `agent_reach/cli.py`: command dispatch and remaining command implementations.
+
+Channel probes must be side-effect-free, execute a real lightweight operation,
+set `active_backend` truthfully, expose per-capability readiness, use exact-host
+matching, and include hermetic tests. Register new channels in
+`agent_reach/channels/__init__.py` and update every README/skill reference.
+
+Never put credentials in argv, logs, fixtures, or docs. Installers require
+explicit consent and must not run elevation, system package managers, mutable
+remote scripts, or unverified downloads.

@@ -18,7 +18,8 @@ from agent_reach.core import AgentReach
 try:
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
-    from mcp.types import Tool, TextContent
+    from mcp.types import TextContent, Tool
+
     HAS_MCP = True
 except ImportError:
     HAS_MCP = False
@@ -30,15 +31,17 @@ def create_server():
         sys.exit(1)
 
     server = Server("agent-reach")
-    config = Config()
+    config = Config(create=False)
     eyes = AgentReach(config)
 
     @server.list_tools()
     async def list_tools():
         return [
-            Tool(name="get_status",
-                 description="Get Agent Reach status: which channels are installed and active.",
-                 inputSchema={"type": "object", "properties": {}}),
+            Tool(
+                name="get_status",
+                description="Get Agent Reach status: which channels are installed and active.",
+                inputSchema={"type": "object", "properties": {}},
+            ),
         ]
 
     @server.call_tool()
@@ -49,7 +52,11 @@ def create_server():
             else:
                 result = f"Unknown tool: {name}"
 
-            text = json.dumps(result, ensure_ascii=False, indent=2) if isinstance(result, (dict, list)) else str(result)
+            text = (
+                json.dumps(result, ensure_ascii=False, indent=2)
+                if isinstance(result, (dict, list))
+                else str(result)
+            )
             return [TextContent(type="text", text=text)]
         except Exception as e:
             return [TextContent(type="text", text=f"Error: {str(e)}")]
@@ -63,5 +70,11 @@ async def main():
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
-if __name__ == "__main__":
+def cli_main() -> None:
+    """Synchronous console-script entry point."""
+
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    cli_main()

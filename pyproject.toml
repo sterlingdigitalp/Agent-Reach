@@ -1,7 +1,7 @@
 [project]
 name = "agent-reach"
-version = "1.5.0"
-description = "Give your AI Agent eyes to see the entire internet. Search + Read 10+ platforms."
+dynamic = ["version"]
+description = "A consent-first capability layer for read-only access across 13 internet channels."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -28,29 +28,32 @@ classifiers = [
 ]
 
 dependencies = [
-    "requests>=2.28",
+    "requests>=2.33.0",
     "feedparser>=6.0",
-    "python-dotenv>=1.0",
     "loguru>=0.7",
     "pyyaml>=6.0",
     "rich>=13.0",
-    "yt-dlp>=2024.0",
+    "yt-dlp>=2026.7.4",
 ]
 
 [project.optional-dependencies]
-browser = ["playwright>=1.40"]
+browser = ["browser-cookie3>=0.19"]
 cookies = ["browser-cookie3>=0.19"]
-all = ["playwright>=1.40", "mcp[cli]>=1.0", "browser-cookie3>=0.19"]
+all = ["mcp[cli]>=1.0", "browser-cookie3>=0.19"]
+mcp = ["mcp[cli]>=1.0"]
 dev = [
-    "pytest>=8.0",
-    "ruff>=0.8",
-    "mypy>=1.12",
+    "pytest>=9.0.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.15.1",
+    "mypy>=1.19.1",
+    "pip-audit>=2.9",
     "types-requests>=2.32",
     "types-PyYAML>=6.0",
 ]
 
 [project.scripts]
 agent-reach = "agent_reach.cli:main"
+agent-reach-mcp = "agent_reach.integrations.mcp_server:cli_main"
 
 [project.urls]
 Homepage = "https://github.com/Panniantong/agent-reach"
@@ -58,8 +61,11 @@ Repository = "https://github.com/Panniantong/agent-reach"
 Issues = "https://github.com/Panniantong/agent-reach/issues"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.27.0"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "agent_reach/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["agent_reach"]
@@ -80,3 +86,11 @@ warn_unused_ignores = true
 check_untyped_defs = true
 ignore_missing_imports = true
 exclude = ["^tests/"]
+
+[tool.coverage.run]
+branch = true
+source = ["agent_reach"]
+
+[tool.coverage.report]
+fail_under = 50
+show_missing = true

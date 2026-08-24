@@ -2,21 +2,23 @@
 """Xiaoyuzhou Podcast (小宇宙播客) — transcribe podcasts via Groq Whisper API."""
 
 import os
+
 from agent_reach.config import Config
 from agent_reach.probe import probe_command
+from agent_reach.utils.urls import host_matches
+
 from .base import Channel
 
 
 class XiaoyuzhouChannel(Channel):
     name = "xiaoyuzhou"
     description = "小宇宙播客转文字"
-    backends = ["groq-whisper", "ffmpeg"]
+    backends = ["groq-whisper"]
     tier = 1
+    capabilities = ("transcription",)
 
     def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-        d = urlparse(url).netloc.lower()
-        return "xiaoyuzhoufm.com" in d
+        return host_matches(url, "xiaoyuzhoufm.com")
 
     def check(self, config=None):
         self.active_backend = None
@@ -48,7 +50,7 @@ class XiaoyuzhouChannel(Channel):
         has_key = bool(os.environ.get("GROQ_API_KEY"))
         if not has_key:
             try:
-                cfg = config if config is not None else Config()
+                cfg = config if config is not None else Config(create=False)
                 has_key = bool(cfg.get("groq_api_key"))
             except Exception:
                 has_key = False

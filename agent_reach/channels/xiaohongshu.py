@@ -12,6 +12,7 @@ import urllib.error
 import urllib.request
 
 from agent_reach.probe import probe_command
+from agent_reach.utils.urls import host_matches
 
 from .base import Channel
 
@@ -81,9 +82,7 @@ def _clean_note(note):
     # Author
     user = inner.get("user") or inner.get("author")
     if isinstance(user, dict):
-        result["user"] = {
-            k: user[k] for k in ("nickname", "user_id", "nick_name") if k in user
-        }
+        result["user"] = {k: user[k] for k in ("nickname", "user_id", "nick_name") if k in user}
 
     # Engagement metrics
     interact = inner.get("interact_info") or inner.get("note_interact_info") or {}
@@ -151,11 +150,10 @@ class XiaoHongShuChannel(Channel):
     description = "小红书笔记"
     backends = ["OpenCLI", "xiaohongshu-mcp", "xhs-cli (xiaohongshu-cli)"]
     tier = 1
+    capabilities = ("read", "search", "comments")
 
     def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-        d = urlparse(url).netloc.lower()
-        return "xiaohongshu.com" in d or "xhslink.com" in d
+        return host_matches(url, "xiaohongshu.com", "xhslink.com")
 
     def check(self, config=None):
         """Probe candidates in order; first fully-usable backend wins.
@@ -214,9 +212,7 @@ class XiaoHongShuChannel(Channel):
         """xiaohongshu-mcp candidate. None = service not running."""
         if not _mcp_service_reachable():
             return None
-        mcporter = probe_command(
-            "mcporter", ["config", "list"], timeout=10, package="mcporter"
-        )
+        mcporter = probe_command("mcporter", ["config", "list"], timeout=10, package="mcporter")
         if mcporter.ok and "xiaohongshu" in mcporter.output:
             return "ok", (
                 "xiaohongshu-mcp 服务运行中"
@@ -230,9 +226,7 @@ class XiaoHongShuChannel(Channel):
 
     def _check_xhs_cli(self):
         """Legacy xhs-cli candidate. None = not installed."""
-        probe = probe_command(
-            "xhs", ["status"], timeout=10, package="xiaohongshu-cli"
-        )
+        probe = probe_command("xhs", ["status"], timeout=10, package="xiaohongshu-cli")
         if probe.status == "missing":
             return None
         if probe.status == "broken":
@@ -252,7 +246,4 @@ class XiaoHongShuChannel(Channel):
                 "  xhs login\n"
                 "（自动从浏览器提取 Cookie，或扫码登录）"
             )
-        return "warn", (
-            "xhs-cli 已安装但状态异常。运行：\n"
-            "  xhs -v status 查看详细信息"
-        )
+        return "warn", ("xhs-cli 已安装但状态异常。运行：\n  xhs -v status 查看详细信息")

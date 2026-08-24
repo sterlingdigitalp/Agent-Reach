@@ -3,9 +3,11 @@
 
 import shutil
 
+from agent_reach.models import CapabilityReadiness
 from agent_reach.probe import probe_command
 from agent_reach.utils.paths import get_ytdlp_config_path, render_ytdlp_fix_command
 from agent_reach.utils.text import read_utf8_text
+from agent_reach.utils.urls import host_matches
 
 from .base import Channel
 
@@ -25,12 +27,10 @@ class YouTubeChannel(Channel):
     description = "YouTube 视频和字幕"
     backends = ["yt-dlp"]
     tier = 0
+    capabilities = ("metadata", "search", "subtitles", "transcription")
 
     def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-
-        d = urlparse(url).netloc.lower()
-        return "youtube.com" in d or "youtu.be" in d
+        return host_matches(url, "youtube.com", "youtu.be")
 
     def check(self, config=None):
         # 真跑 yt-dlp --version 探活，区分未装 / venv 断链 / 跑不动
@@ -78,6 +78,18 @@ class YouTubeChannel(Channel):
                     msg += f"，可转写音频（{'→'.join(providers)}）"
         return "ok", msg
 
+    def capability_readiness(self, status, message):
+        readiness = super().capability_readiness(status, message)
+        if status != "ok":
+            return readiness
+        transcription_ready = "可转写音频" in message
+        readiness["transcription"] = CapabilityReadiness(
+            "ready" if transcription_ready else "unavailable",
+            "Groq/OpenAI + ffmpeg" if transcription_ready else None,
+            message,
+        )
+        return readiness
+
     def transcribe(self, url: str, *, provider: str = "auto", config=None) -> str:
         """Download a YouTube video's audio and return its transcript.
 
@@ -88,4 +100,3 @@ class YouTubeChannel(Channel):
         from agent_reach.transcribe import transcribe as _transcribe
 
         return _transcribe(url, provider=provider, config=config)
-

@@ -14,12 +14,15 @@ import shutil
 import subprocess
 
 from agent_reach.utils.process import utf8_subprocess_env
+from agent_reach.utils.urls import host_matches
 
 from .base import Channel
 
 _CREDENTIAL_FILE = "~/.config/rdt-cli/credential.json"
 # Pinned to the 0.4.2 state — PyPI still only has 0.4.1 (upstream issue #10).
-_RDT_GIT_SOURCE = "git+https://github.com/public-clis/rdt-cli.git@5e4fb3720d5c174e976cd425ccc3b879d52cac66"
+_RDT_GIT_SOURCE = (
+    "git+https://github.com/public-clis/rdt-cli.git@5e4fb3720d5c174e976cd425ccc3b879d52cac66"
+)
 
 #: shell 对"找到但不可执行/找不到"使用的退出码（对齐 agent_reach.probe）
 _BROKEN_EXIT_CODES = (126, 127)
@@ -37,12 +40,10 @@ class RedditChannel(Channel):
     description = "Reddit 帖子和评论"
     backends = ["OpenCLI", "rdt-cli"]
     tier = 1  # no zero-config path exists — see module docstring
+    capabilities = ("read", "search")
 
     def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-
-        d = urlparse(url).netloc.lower()
-        return "reddit.com" in d or "redd.it" in d
+        return host_matches(url, "reddit.com", "redd.it")
 
     def check(self, config=None):
         """Probe candidates in order; first fully-usable backend wins."""
@@ -113,7 +114,10 @@ class RedditChannel(Channel):
                 env=utf8_subprocess_env(),
             )
         except subprocess.TimeoutExpired:
-            return "error", "rdt 响应超时（>10s），Reddit 状态未知。稍后重试或运行 `rdt status` 查看详情"
+            return (
+                "error",
+                "rdt 响应超时（>10s），Reddit 状态未知。稍后重试或运行 `rdt status` 查看详情",
+            )
         except OSError:
             # 含 FileNotFoundError：which 命中但 exec 失败 = venv 断链（probe 的 broken）
             return "error", _RDT_BROKEN_HINT
@@ -124,7 +128,10 @@ class RedditChannel(Channel):
         if r.returncode != 0:
             detail = (r.stderr or r.stdout or "").strip().splitlines()
             tail = detail[-1] if detail else "无输出"
-            return "error", f"rdt 异常退出（exit {r.returncode}）：{tail}。运行 `rdt status` 查看详情"
+            return (
+                "error",
+                f"rdt 异常退出（exit {r.returncode}）：{tail}。运行 `rdt status` 查看详情",
+            )
 
         # 进程正常退出 → rdt 本身是活的（无论登录与否）
         try:

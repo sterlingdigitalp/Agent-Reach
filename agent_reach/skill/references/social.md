@@ -97,13 +97,14 @@ twitter likes
 ### search 失败时的重试链（按序执行，成功即停）
 
 1. 直接重试一次（偶发失败常见）：`twitter search "query" -n 10`
-2. 升级后再试：`pipx upgrade twitter-cli && twitter search "query" -n 10`
-3. 换 OpenCLI 备选（桌面，复用浏览器登录态）：`opencli twitter search "query" -f yaml`
-4. 都不行就改用 `twitter feed` / `twitter user-posts @somebody` 等稳定命令绕路
+2. 换 OpenCLI 备选（桌面，复用浏览器登录态）：`opencli twitter search "query" -f yaml`
+3. 都不行就改用 `twitter feed` / `twitter user-posts @somebody` 等稳定命令绕路。
+   不得在 fetch-only 工作流中自动升级工具。
 
 ### 重要注意事项
 
-> **安装**: `pipx install twitter-cli`（确保 v0.8.5+）
+> 本 skill 不安装或升级工具。doctor 必须已报告 twitter-cli 后端可用；
+> 版本选择属于单独、明确授权的维护流程。
 >
 > **认证**: 推荐用 Cookie-Editor 导出后设置环境变量 `TWITTER_AUTH_TOKEN` + `TWITTER_CT0`。自动提取在 SSH/Docker/无头环境不可用。
 >
@@ -136,56 +137,42 @@ opencli bilibili subtitle BVxxx
 ### 热门主题
 
 ```bash
-curl -s "https://www.v2ex.com/api/topics/hot.json" -H "User-Agent: agent-reach/1.0"
+curl --silent --show-error --max-time 30 --max-filesize 1048576 --proto '=https' \
+  "https://www.v2ex.com/api/topics/hot.json" -H "User-Agent: agent-reach/1.0"
 ```
 
 ### 节点主题
 
 ```bash
 # node_name 如: python, tech, jobs, qna, programmers
-curl -s "https://www.v2ex.com/api/topics/show.json?node_name=python&page=1" -H "User-Agent: agent-reach/1.0"
+curl --silent --show-error --max-time 30 --max-filesize 1048576 --proto '=https' \
+  "https://www.v2ex.com/api/topics/show.json?node_name=python&page=1" \
+  -H "User-Agent: agent-reach/1.0"
 ```
 
 ### 主题详情
 
 ```bash
 # topic_id 从 URL 获取，如 https://www.v2ex.com/t/1234567
-curl -s "https://www.v2ex.com/api/topics/show.json?id=TOPIC_ID" -H "User-Agent: agent-reach/1.0"
+curl --silent --show-error --max-time 30 --max-filesize 1048576 --proto '=https' \
+  "https://www.v2ex.com/api/topics/show.json?id=TOPIC_ID" \
+  -H "User-Agent: agent-reach/1.0"
 ```
 
 ### 主题回复
 
 ```bash
-curl -s "https://www.v2ex.com/api/replies/show.json?topic_id=TOPIC_ID&page=1" -H "User-Agent: agent-reach/1.0"
+curl --silent --show-error --max-time 30 --max-filesize 1048576 --proto '=https' \
+  "https://www.v2ex.com/api/replies/show.json?topic_id=TOPIC_ID&page=1" \
+  -H "User-Agent: agent-reach/1.0"
 ```
 
 ### 用户信息
 
 ```bash
-curl -s "https://www.v2ex.com/api/members/show.json?username=USERNAME" -H "User-Agent: agent-reach/1.0"
-```
-
-### Python 调用示例
-
-```python
-from agent_reach.channels.v2ex import V2EXChannel
-
-ch = V2EXChannel()
-
-# 获取热门帖子
-topics = ch.get_hot_topics(limit=10)
-for t in topics:
-    print(f"[{t['node_title']}] {t['title']} ({t['replies']} 回复)")
-
-# 获取节点帖子
-node_topics = ch.get_node_topics("python", limit=5)
-
-# 获取帖子详情 + 回复
-topic = ch.get_topic(1234567)
-print(topic["title"], "—", topic["author"])
-
-# 获取用户信息
-user = ch.get_user("Livid")
+curl --silent --show-error --max-time 30 --max-filesize 1048576 --proto '=https' \
+  "https://www.v2ex.com/api/members/show.json?username=USERNAME" \
+  -H "User-Agent: agent-reach/1.0"
 ```
 
 > **节点列表**: https://www.v2ex.com/planes
@@ -224,7 +211,8 @@ rdt popular --limit 10          # 浏览热门
 rdt all --limit 10              # 浏览 /r/all
 ```
 
-> **安装**: `pipx install 'git+https://github.com/public-clis/rdt-cli.git'`（PyPI 版本落后，需从 GitHub 装 v0.4.2+）。先 `rdt login` 才能搜索和阅读（服务器无浏览器时手动写 Cookie，见 doctor 提示）。
+> 本 skill 不安装工具或改变登录状态。只有 doctor 已报告 rdt-cli 后端可用时
+> 才调用它；安装和登录属于单独、明确授权的维护流程。
 > 建议使用 `--yaml` 输出，对 AI agent 更友好。
 
 ### 高级选项：官方 API + PRAW（仅限已有凭证的用户）

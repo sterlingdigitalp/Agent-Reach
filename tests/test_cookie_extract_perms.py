@@ -13,7 +13,6 @@ import os
 import stat
 import subprocess
 import sys
-import tempfile
 
 import pytest
 
@@ -36,6 +35,18 @@ def test_sync_xfetch_session_writes_0600(tmp_path, monkeypatch):
     data = json.loads(session_path.read_text(encoding="utf-8"))
     assert data["authToken"] == "auth_xxx"
     assert data["ct0"] == "ct0_yyy"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX perm semantics only")
+def test_sync_xfetch_session_repairs_legacy_0644(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    path = tmp_path / ".config" / "xfetch" / "session.json"
+    path.parent.mkdir(parents=True)
+    path.write_text('{"authToken":"old","ct0":"old"}', encoding="utf-8")
+    path.chmod(0o644)
+
+    _sync_xfetch_session("new-auth", "new-ct0")
+    assert path.stat().st_mode & 0o777 == 0o600
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX perm semantics only")
@@ -68,10 +79,7 @@ def test_sync_bird_env_quotes_shell_metachars(tmp_path, monkeypatch):
 
     # Sourcing the file must NOT execute the injected payload. Read back the
     # exported values from a subshell instead — they should equal the originals.
-    probe = (
-        f". {env_path}; "
-        f'printf "AUTH=%s\\nCT0=%s\\n" "$AUTH_TOKEN" "$CT0"'
-    )
+    probe = f'. {env_path}; printf "AUTH=%s\\nCT0=%s\\n" "$AUTH_TOKEN" "$CT0"'
     result = subprocess.run(
         ["sh", "-c", probe],
         capture_output=True,
@@ -79,9 +87,7 @@ def test_sync_bird_env_quotes_shell_metachars(tmp_path, monkeypatch):
         timeout=5,
     )
     assert result.returncode == 0, result.stderr
-    lines = dict(
-        line.split("=", 1) for line in result.stdout.strip().splitlines() if "=" in line
-    )
+    lines = dict(line.split("=", 1) for line in result.stdout.strip().splitlines() if "=" in line)
     assert lines["AUTH"] == hostile_auth, "auth_token round-trip broke — injection possible"
     assert lines["CT0"] == hostile_ct0, "ct0 round-trip broke — injection possible"
     # And no side-effect files materialised.
