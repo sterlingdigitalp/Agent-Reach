@@ -6,7 +6,11 @@ afterward, the agent invokes those tools directly.
 ## Security contract
 
 - The default `install` invocation is plan-only and makes no changes.
-- `--dry-run`, `--safe`, and `doctor` create no files or directories.
+- `--dry-run`, `--safe`, and `doctor` never write Agent Reach files or
+  directories. Note that health probes execute upstream status commands
+  (`gh auth status`, `mcporter config list`, …) which may write their own
+  state files, and the `web`/`exa_search`/`bilibili`/`v2ex`/`xueqiu` probes
+  make outbound network requests to their respective services.
 - `--yes` is required for user-level package/configuration changes.
 - Agent Reach never runs elevation, a system package manager, or a downloaded
   setup script. Missing GitHub CLI, Node.js, ffmpeg, and similar system tools

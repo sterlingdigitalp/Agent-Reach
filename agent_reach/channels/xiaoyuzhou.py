@@ -58,7 +58,7 @@ class XiaoyuzhouChannel(Channel):
             return "warn", (
                 "需要配置 Groq API Key（免费）。步骤：\n"
                 "  1. 注册 https://console.groq.com\n"
-                "  2. 运行: agent-reach configure groq-key gsk_xxxxx"
+                "  2. 运行: printf '%s' \"$GROQ_API_KEY\" | agent-reach configure groq-key --stdin"
             )
 
         self.active_backend = "groq-whisper"

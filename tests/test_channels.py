@@ -69,21 +69,20 @@ def test_v2ex_probe_network_failure_is_degraded(monkeypatch):
 
 
 def test_xueqiu_probe_uses_supplied_config(monkeypatch, tmp_path):
-    import agent_reach.channels.xueqiu as module
-
     config = Config(config_path=tmp_path / "config.yaml")
     config.set("xueqiu_cookie", "xq_a_token=test; xq_is_login=1")
     captured = {}
 
+    channel = XueqiuChannel()
+
     def fake_open(request, timeout=None):
-        captured["cookie"] = module._cookie_jar
+        captured["cookie"] = channel._session.cookie_jar
         captured["referer"] = request.get_header("Referer")
         captured["ua"] = request.get_header("User-agent")
         return FakeResponse({"data": {"items": [{"quote": {"symbol": "SH000001"}}]}})
 
-    monkeypatch.setattr(module, "_cookies_initialized", False)
-    monkeypatch.setattr(module._opener, "open", fake_open)
-    status, _ = XueqiuChannel().check(config)
+    monkeypatch.setattr(channel._session.opener, "open", fake_open)
+    status, _ = channel.check(config)
     assert status == "ok"
     assert captured["referer"] == "https://xueqiu.com/"
     assert "Mozilla" in captured["ua"]
@@ -121,7 +120,7 @@ def test_xueqiu_rookiepy_failure_falls_back_to_browser_cookie3(monkeypatch):
     browser_cookie3 = types.SimpleNamespace(chrome=lambda **_kwargs: [cookie])
     monkeypatch.setitem(sys.modules, "rookiepy", rookiepy)
     monkeypatch.setitem(sys.modules, "browser_cookie3", browser_cookie3)
-    assert module._load_cookies_from_browser() is True
+    assert module._XueqiuSession().load_cookies_from_browser() is True
 
 
 def test_reddit_backend_selection(monkeypatch):

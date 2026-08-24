@@ -144,75 +144,6 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
     return results
 
 
-def _open_owner_only(path: str):
-    """Return a private temporary text stream that atomically replaces *path*."""
-
-    from contextlib import contextmanager
-    from io import StringIO
-
-    from agent_reach.utils.security import atomic_write_private_text
-
-    @contextmanager
-    def private_stream():
-        buffer = StringIO()
-        yield buffer
-        atomic_write_private_text(path, buffer.getvalue())
-
-    return private_stream()
-
-
-def _sync_xfetch_session(auth_token: str, ct0: str) -> None:
-    """Sync Twitter credentials to ~/.config/xfetch/session.json (legacy xreach compat)."""
-    import json
-    import os
-
-    try:
-        xfetch_dir = os.path.join(os.path.expanduser("~"), ".config", "xfetch")
-        os.makedirs(xfetch_dir, exist_ok=True)
-        session_path = os.path.join(xfetch_dir, "session.json")
-        session_data: dict = {}
-        if os.path.exists(session_path):
-            try:
-                with open(session_path, "r", encoding="utf-8") as sf:
-                    session_data = json.load(sf)
-            except (json.JSONDecodeError, OSError):
-                session_data = {}
-        session_data["authToken"] = auth_token
-        session_data["ct0"] = ct0
-        with _open_owner_only(session_path) as sf:
-            json.dump(session_data, sf, indent=2)
-    except Exception:
-        # Non-fatal: agent-reach config is the source of truth, xfetch sync is best-effort
-        pass
-
-
-def _sync_bird_env(auth_token: str, ct0: str) -> None:
-    """Write Twitter credentials to ~/.config/bird/credentials.env for bird CLI.
-
-    bird reads AUTH_TOKEN and CT0 from environment variables. This writes a
-    shell-sourceable file so users can `source ~/.config/bird/credentials.env`.
-    Values are passed through shlex.quote so a token containing a quote, $, or
-    backtick cannot break out into shell syntax when the file is sourced.
-    """
-    import os
-    import shlex
-
-    try:
-        bird_dir = os.path.join(os.path.expanduser("~"), ".config", "bird")
-        os.makedirs(bird_dir, exist_ok=True)
-        env_path = os.path.join(bird_dir, "credentials.env")
-        with _open_owner_only(env_path) as f:
-            f.write(f"AUTH_TOKEN={shlex.quote(auth_token)}\n")
-            f.write(f"CT0={shlex.quote(ct0)}\n")
-    except Exception:
-        # Non-fatal: agent-reach config is the source of truth, bird env sync is best-effort
-        pass
-
-
-# Alias for callers expecting the name _sync_bird_credentials
-_sync_bird_credentials = _sync_bird_env
-
-
 def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
     """
     Extract cookies and configure all found platforms.
@@ -242,8 +173,6 @@ def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
         if "auth_token" in tc and "ct0" in tc:
             config.set("twitter_auth_token", tc["auth_token"])
             config.set("twitter_ct0", tc["ct0"])
-            # Legacy sync (best-effort)
-            _sync_xfetch_session(tc["auth_token"], tc["ct0"])
             results_list.append(("Twitter/X", True, "auth_token + ct0"))
         else:
             found = ", ".join(tc.keys())

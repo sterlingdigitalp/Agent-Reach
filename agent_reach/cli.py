@@ -812,14 +812,21 @@ def _install_rdt_cli():
     ]:
         if shutil.which(tool):
             try:
-                subprocess.run(
+                proc = subprocess.run(
                     cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=120
                 )
+                if proc.returncode != 0:
+                    tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:]
+                    print(
+                        f"  [!]  {tool} exited {proc.returncode}" + (f": {tail[0]}" if tail else "")
+                    )
+                    continue
                 if shutil.which("rdt"):
                     print("  ✅ rdt-cli installed")
                     return
-            except Exception:
-                pass
+                print(f"  [!]  {tool} reported success but 'rdt' is not on PATH")
+            except Exception as e:
+                print(f"  [!]  {tool} install attempt failed: {e}")
     print(f"  [!]  rdt-cli install failed. Run: pipx install '{_RDT_GIT_SOURCE}'")
 
 
@@ -1260,7 +1267,8 @@ def _configure_xhs_cookies(value):
     value = value.strip()
     if not value:
         print("[X] Missing cookie value.")
-        print("   Usage: agent-reach configure xhs-cookies '<cookie JSON or header string>'")
+        print("   Usage: agent-reach configure xhs-cookies --file <cookies.json>")
+        print("      or: agent-reach configure xhs-cookies --stdin  (pipe the cookie JSON)")
         return
 
     # Detect format and parse

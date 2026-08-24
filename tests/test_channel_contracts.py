@@ -59,8 +59,10 @@ def test_channel_active_backend_set_by_check(monkeypatch, tmp_path):
     monkeypatch.setattr(urllib.request, "urlopen", _no_net)
     import agent_reach.channels.xueqiu as xueqiu_mod
 
-    monkeypatch.setattr(xueqiu_mod, "_cookies_initialized", True)
-    monkeypatch.setattr(xueqiu_mod._opener, "open", _no_net)
+    # Block every built opener (covers each channel instance's private
+    # _XueqiuSession opener) and keep browser cookie stores untouched.
+    monkeypatch.setattr(urllib.request.OpenerDirector, "open", _no_net)
+    monkeypatch.setattr(xueqiu_mod._XueqiuSession, "load_cookies_from_browser", lambda self: False)
 
     config = Config(config_path=tmp_path / "config.yaml")
     for ch in get_all_channels():

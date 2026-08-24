@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
-"""Verify credential files written by cookie sync helpers and CLI helpers
-are owner-only (0o600) and that values containing shell metacharacters do
-not break the shell-sourceable env file produced by _sync_bird_env().
+"""Credential storage after browser cookie extraction is owner-only (0o600).
 
-Companion to tests/test_config.py::test_save_creates_file_with_restricted_permissions —
-the same threat-model claim ("Cookie/Token only stored locally, 600
-permissions") covers these paths.
+Agent Reach persists Twitter tokens (and the Xueqiu cookie string) into
+``~/.agent-reach/config.yaml`` and nowhere else — the legacy xfetch/bird
+side-channel writers were removed so config.yaml is the single source of
+truth. This test verifies that the file cookie extraction writes through
+lands with restricted permissions, starting even from an insecure 0644 file.
+
+Companion to tests/test_config.py::test_save_creates_file_with_restricted_permissions.
 """
 
-import json
 import os
 import stat
-import subprocess
 import sys
 
 import pytest
 
-from agent_reach.cookie_extract import _sync_bird_env, _sync_xfetch_session
+from agent_reach.config import Config
 
 
 def _owner_only(path: str) -> bool:
@@ -25,71 +25,40 @@ def _owner_only(path: str) -> bool:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX perm semantics only")
-def test_sync_xfetch_session_writes_0600(tmp_path, monkeypatch):
+def test_configure_from_browser_persists_tokens_0600(tmp_path, monkeypatch):
+    """A successful Twitter extraction stores tokens in a 0600 config.yaml."""
     monkeypatch.setenv("HOME", str(tmp_path))
-    _sync_xfetch_session("auth_xxx", "ct0_yyy")
-    session_path = tmp_path / ".config" / "xfetch" / "session.json"
-    assert session_path.exists(), "expected ~/.config/xfetch/session.json"
-    assert _owner_only(str(session_path)), "session.json must be 0o600"
-    # Round-trip the content so we know we didn't accidentally corrupt JSON.
-    data = json.loads(session_path.read_text(encoding="utf-8"))
-    assert data["authToken"] == "auth_xxx"
-    assert data["ct0"] == "ct0_yyy"
+    cfg_path = tmp_path / ".agent-reach" / "config.yaml"
+    config = Config(config_path=cfg_path)
 
+    import agent_reach.cookie_extract as ce
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX perm semantics only")
-def test_sync_xfetch_session_repairs_legacy_0644(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    path = tmp_path / ".config" / "xfetch" / "session.json"
-    path.parent.mkdir(parents=True)
-    path.write_text('{"authToken":"old","ct0":"old"}', encoding="utf-8")
-    path.chmod(0o644)
-
-    _sync_xfetch_session("new-auth", "new-ct0")
-    assert path.stat().st_mode & 0o777 == 0o600
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX perm semantics only")
-def test_sync_bird_env_writes_0600(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    _sync_bird_env("auth_xxx", "ct0_yyy")
-    env_path = tmp_path / ".config" / "bird" / "credentials.env"
-    assert env_path.exists(), "expected ~/.config/bird/credentials.env"
-    assert _owner_only(str(env_path)), "credentials.env must be 0o600"
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX sh needed for sourcing")
-def test_sync_bird_env_quotes_shell_metachars(tmp_path, monkeypatch):
-    """Tokens containing ", $, `, ; etc. must not break out of the assignment.
-
-    Prior implementation used `f'AUTH_TOKEN="{auth_token}"'` which an attacker-
-    controlled cookie containing a literal `"` could break out of, turning a
-    later `source ~/.config/bird/credentials.env` into arbitrary shell.
-    """
-    monkeypatch.setenv("HOME", str(tmp_path))
-    # Side-effect markers live under tmp_path (auto-cleaned by pytest) rather
-    # than a shared absolute /tmp path — otherwise one vulnerable run leaves a
-    # marker behind that fails every later run on the same machine/CI runner.
-    pwn_auth = tmp_path / "pwn-auth"
-    pwn_ct0 = tmp_path / "pwn-ct0"
-    hostile_auth = f'inj"; touch {pwn_auth}; #'
-    hostile_ct0 = f"ct0_$(touch {pwn_ct0})"
-    _sync_bird_env(hostile_auth, hostile_ct0)
-    env_path = tmp_path / ".config" / "bird" / "credentials.env"
-
-    # Sourcing the file must NOT execute the injected payload. Read back the
-    # exported values from a subshell instead — they should equal the originals.
-    probe = f'. {env_path}; printf "AUTH=%s\\nCT0=%s\\n" "$AUTH_TOKEN" "$CT0"'
-    result = subprocess.run(
-        ["sh", "-c", probe],
-        capture_output=True,
-        text=True,
-        timeout=5,
+    monkeypatch.setattr(
+        ce, "extract_all", lambda browser: {"twitter": {"auth_token": "auth_xxx", "ct0": "ct0_yyy"}}
     )
-    assert result.returncode == 0, result.stderr
-    lines = dict(line.split("=", 1) for line in result.stdout.strip().splitlines() if "=" in line)
-    assert lines["AUTH"] == hostile_auth, "auth_token round-trip broke — injection possible"
-    assert lines["CT0"] == hostile_ct0, "ct0 round-trip broke — injection possible"
-    # And no side-effect files materialised.
-    assert not pwn_auth.exists()
-    assert not pwn_ct0.exists()
+
+    results = ce.configure_from_browser("chrome", config)
+
+    assert any(name == "Twitter/X" and ok for name, ok, _ in results)
+    assert cfg_path.exists()
+    assert _owner_only(str(cfg_path)), "config.yaml holding tokens must be owner-only"
+
+    reloaded = Config(config_path=cfg_path)
+    assert reloaded.get("twitter_auth_token") == "auth_xxx"
+    assert reloaded.get("twitter_ct0") == "ct0_yyy"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX perm semantics only")
+def test_config_save_repairs_legacy_0644(tmp_path, monkeypatch):
+    """An existing world-readable config is tightened to 0600 on the next save."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    cfg_dir = tmp_path / ".agent-reach"
+    cfg_dir.mkdir(parents=True)
+    cfg_path = cfg_dir / "config.yaml"
+    cfg_path.write_text("schema_version: 1\n", encoding="utf-8")
+    os.chmod(cfg_path, 0o644)
+
+    config = Config(config_path=cfg_path)
+    config.set("twitter_auth_token", "new-auth")
+
+    assert _owner_only(str(cfg_path))
