@@ -132,6 +132,13 @@ def main():
         choices=["chrome", "firefox", "edge", "brave", "opera"],
         help="Auto-extract ALL platform cookies from browser (chrome/firefox/edge/brave/opera)",
     )
+    p_conf.add_argument(
+        "--profile",
+        metavar="PROFILE",
+        default=None,
+        help="Chrome profile directory to read (e.g. 'Profile 6', 'Default'). "
+        "Required when your login lives in a non-default Chrome profile.",
+    )
 
     # ── doctor ──
     p_doctor = sub.add_parser("doctor", help="Check platform availability")
@@ -927,10 +934,12 @@ def _cmd_configure(args):
         from agent_reach.cookie_extract import configure_from_browser
 
         browser = args.from_browser
-        print(f"Extracting cookies from {browser}...")
+        profile = getattr(args, "profile", None)
+        where = f"{browser} ({profile})" if profile else browser
+        print(f"Extracting cookies from {where}...")
         print()
 
-        results = configure_from_browser(browser, config)
+        results = configure_from_browser(browser, config, profile=profile)
 
         found_any = False
         for platform, success, message in results:

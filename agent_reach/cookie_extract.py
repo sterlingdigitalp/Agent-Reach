@@ -21,7 +21,47 @@ PLATFORM_SPECS: list[dict[str, Any]] = [
 ]
 
 
-def extract_all(browser: str = "chrome") -> Dict[str, dict]:
+def _chrome_profile_cookie_file(profile: str) -> str:
+    """Resolve a Chrome profile name (e.g. 'Profile 6', 'Default') to its Cookies DB.
+
+    Chromium keeps a separate cookie store per profile. browser_cookie3 reads
+    'Default' unless pointed at a specific file, so multi-profile users must
+    name their profile explicitly. Raises FileNotFoundError with the available
+    profiles listed when the requested one has no cookie store.
+    """
+    import os
+    import sys
+
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support/Google/Chrome")
+    elif sys.platform.startswith("win"):
+        base = os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data")
+    else:
+        base = os.path.expanduser("~/.config/google-chrome")
+
+    for candidate in (
+        os.path.join(base, profile, "Cookies"),
+        os.path.join(base, profile, "Network", "Cookies"),
+    ):
+        if os.path.exists(candidate):
+            return candidate
+
+    available = []
+    try:
+        for entry in sorted(os.listdir(base)):
+            if os.path.exists(os.path.join(base, entry, "Cookies")) or os.path.exists(
+                os.path.join(base, entry, "Network", "Cookies")
+            ):
+                available.append(entry)
+    except OSError:
+        pass
+    raise FileNotFoundError(
+        f"No Chrome cookie store for profile {profile!r}. "
+        f"Profiles with cookies: {', '.join(available) or '(none found)'}"
+    )
+
+
+def extract_all(browser: str = "chrome", profile: str | None = None) -> Dict[str, dict]:
     """
     Extract cookies for all supported platforms from the specified browser.
 
@@ -30,9 +70,13 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
             "twitter": {"auth_token": "xxx", "ct0": "yyy"},
         }
     """
-    # Try rookiepy first (Rust-based, more stable), fallback to browser_cookie3
+    # Try rookiepy first (Rust-based, more stable), fallback to browser_cookie3.
+    # A named profile forces browser_cookie3: it accepts an explicit cookie_file,
+    # which is how per-profile selection is implemented here.
     use_rookiepy = False
     try:
+        if profile and browser == "chrome":
+            raise ImportError  # route to browser_cookie3 for profile support
         import rookiepy
 
         use_rookiepy = True
@@ -84,8 +128,11 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
             "brave": browser_cookie3.brave,
             "opera": browser_cookie3.opera,
         }
+        kwargs = {}
+        if profile and browser == "chrome":
+            kwargs["cookie_file"] = _chrome_profile_cookie_file(profile)
         try:
-            cookie_jar = browser_funcs[browser]()
+            cookie_jar = browser_funcs[browser](**kwargs)
         except Exception as e:
             raise RuntimeError(
                 f"Could not read {browser} cookies: {e}\n"
@@ -124,7 +171,9 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
     return results
 
 
-def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
+def configure_from_browser(
+    browser: str, config, profile: str | None = None
+) -> List[Tuple[str, bool, str]]:
     """
     Extract cookies and configure all found platforms.
 
@@ -133,7 +182,7 @@ def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
     results_list = []
 
     try:
-        extracted = extract_all(browser)
+        extracted = extract_all(browser, profile=profile)
     except Exception as e:
         return [("Browser", False, str(e))]
 

@@ -34,7 +34,9 @@ def test_configure_from_browser_persists_tokens_0600(tmp_path, monkeypatch):
     import agent_reach.cookie_extract as ce
 
     monkeypatch.setattr(
-        ce, "extract_all", lambda browser: {"twitter": {"auth_token": "auth_xxx", "ct0": "ct0_yyy"}}
+        ce,
+        "extract_all",
+        lambda browser, profile=None: {"twitter": {"auth_token": "auth_xxx", "ct0": "ct0_yyy"}},
     )
 
     results = ce.configure_from_browser("chrome", config)
