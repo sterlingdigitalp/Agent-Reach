@@ -1,20 +1,17 @@
 # 常见问题排查
 
-## 雪球 / Xueqiu: API 返回 400
+## doctor 默认不显示 Web/Exa/Bilibili/V2EX/LinkedIn 的真实状态
 
-**症状：** `agent-reach doctor` 显示雪球 ⚠️，报 `HTTP Error 400`
+**症状：** `agent-reach doctor` 里这几个渠道显示 `skipped`。
 
-**原因：** 雪球 API 需要登录 Cookie，无法通过匿名访问获取。
+**原因：** 这些探测会发起出站网络请求，`doctor` 默认离线运行，避免每次体检都
+泄露访问记录。
 
-**解决方案：** 在 Chrome 里登录 xueqiu.com，然后运行：
+**解决方案：** 需要真实探测联网渠道时运行：
 
 ```bash
-agent-reach configure --from-browser chrome
+agent-reach doctor --live
 ```
-
-再次运行 `agent-reach doctor` 确认恢复 ✅。Cookie 过期后重新运行即可。
-
----
 
 ## Twitter/X: twitter-cli 连接失败
 

@@ -1,6 +1,11 @@
 # Agent Reach
 
-Agent Reach gives AI agents diagnosed access to 13 internet platforms through
+> This repository is a hardened personal fork of
+> [Panniantong/Agent-Reach](https://github.com/Panniantong/Agent-Reach), maintained at
+> [sterlingdigitalp/Agent-Reach](https://github.com/sterlingdigitalp/Agent-Reach). All
+> credit for the upstream project belongs to the original author.
+
+Agent Reach gives AI agents diagnosed access to 10 internet platforms through
 upstream tools. It is a capability layer—not a unified read/search wrapper.
 After `agent-reach doctor --json` selects an active backend, the agent calls
 that backend directly.
@@ -13,19 +18,19 @@ that backend directly.
 | Twitter/X | twitter-cli, OpenCLI, bird fallback |
 | YouTube | yt-dlp |
 | Reddit | OpenCLI or rdt-cli; login required |
-| Bilibili | bili-cli, OpenCLI, limited search API fallback |
-| XiaoHongShu | OpenCLI or xiaohongshu-mcp |
+| Bilibili | public search API (read-only, no cookies) |
 | LinkedIn | linkedin-scraper-mcp; Jina read-only fallback |
-| Xiaoyuzhou | Groq/OpenAI transcription with ffmpeg |
 | V2EX | public API |
-| Xueqiu | authenticated API cookie |
 | RSS | feedparser |
 | Exa Search | Exa MCP through mcporter; no API key |
 | Web | Jina Reader |
 
-Health JSON reports channel status, `active_backend`, and readiness separately
-for each declared capability. A limited fallback is degraded, not “fully
-available.”
+`agent-reach doctor` is offline by default: the Web, Exa Search, Bilibili,
+V2EX, and LinkedIn probes make outbound network requests, so they are marked
+`network=True` and report `skipped` unless you run
+`agent-reach doctor --live`. Health JSON reports channel status,
+`active_backend`, and readiness separately for each declared capability. A
+limited fallback is degraded, not "fully available."
 
 ## Safe installation
 
@@ -46,11 +51,12 @@ Apply user-level changes only after review:
 
 ```bash
 agent-reach install --env=auto --yes
-agent-reach install --env=auto --channels=twitter,xiaoyuzhou --yes
+agent-reach install --env=auto --channels=twitter,reddit --yes
 ```
 
-Agent Reach never runs elevation, system package managers, or downloaded setup
-scripts. `doctor`, `--dry-run`, and plan mode create no state.
+`--channels` accepts `twitter`, `reddit`, `linkedin`, or `all`. Agent Reach
+never runs elevation, system package managers, or downloaded setup scripts.
+`doctor`, `--dry-run`, and plan mode create no state.
 
 ## Credentials
 
@@ -65,19 +71,25 @@ printf '%s' "$GH_TOKEN" | agent-reach configure github-token --stdin
 
 Secret-bearing Agent Reach files are replaced atomically with owner-only
 permissions, including legacy files that were previously 0644. GitHub tokens
-are stored by `gh`, not Agent Reach. See [the install guide](install.md) for
-the key-to-consumer map.
+are stored by `gh`, not Agent Reach. Browser auto-import
+(`configure --from-browser`) extracts Twitter's `auth_token` and `ct0` only.
+The Twitter probe never runs `twitter-cli` unless
+`TWITTER_AUTH_TOKEN`/`TWITTER_CT0` are configured, to avoid triggering the
+macOS Keychain prompt. See [the install guide](install.md) for the
+key-to-consumer map.
 
 ## Diagnosis and skill
 
 ```bash
 agent-reach doctor
+agent-reach doctor --live
 agent-reach doctor --json
 agent-reach skill --install
 ```
 
-Doctor is strictly read-only. Skill installation is explicit and preserves
-local customizations unless `--force` is requested.
+Doctor is strictly read-only and offline by default; pass `--live` to also run
+the probes that make outbound network requests. Skill installation is
+explicit and preserves local customizations unless `--force` is requested.
 
 The packaged skill is fetch-only. It treats retrieved content as untrusted,
 does not accept embedded instructions, validates exact hosts, bounds output,

@@ -1,25 +1,33 @@
 # Agent Reach
 
-Agent Reach is a capability layer for 13 internet platforms. It installs,
+Agent Reach is a capability layer for 10 internet platforms. It installs,
 configures, and diagnoses upstream tools; it does not provide unified
 `read`/`search` wrapper commands. Agents call the active upstream backend
 directly after inspecting `agent-reach doctor --json`.
 
-Supported channels: GitHub, Twitter/X, YouTube, Reddit, Bilibili,
-XiaoHongShu, LinkedIn, Xiaoyuzhou, V2EX, Xueqiu, RSS, Exa Search, and Web.
+Supported channels: GitHub, Twitter/X, YouTube, Reddit, Bilibili (public
+search API only), LinkedIn, V2EX, RSS, Exa Search, and Web.
 
 Current CLI commands:
 
-`setup`, `install`, `configure`, `doctor`, `uninstall`, `skill`, `format`,
+`setup`, `install`, `configure`, `doctor`, `uninstall`, `skill`,
 `transcribe`, `check-update`, `watch`, and `version`.
 
 Safety contracts:
 
 - `doctor`, `install --dry-run`, and install plan mode are read-only.
+- `doctor` is offline by default; the web/exa_search/bilibili/v2ex/linkedin
+  probes that make outbound network requests report `status: "skipped"`
+  unless `doctor --live` is passed.
 - `install` requires `--yes` before it changes user state.
 - System package managers, elevation, and downloaded setup scripts are never
   run automatically.
 - Secrets use an interactive prompt, `--stdin`, or `--file`, never argv.
+- Browser cookie auto-import (`configure --from-browser`) extracts only
+  Twitter's `auth_token`/`ct0`.
+- The Twitter probe never runs `twitter-cli` unless
+  `TWITTER_AUTH_TOKEN`/`TWITTER_CT0` are configured, to avoid a macOS
+  Keychain prompt.
 - The packaged skill is fetch-only and treats fetched content as untrusted.
 
 Documentation:

@@ -1,12 +1,14 @@
 # Agent Reach
 
-Agent Reach は、13 のインターネットサービス向け上流ツールをインストール・設定・
+Agent Reach は、10 のインターネットサービス向け上流ツールをインストール・設定・
 診断する capability layer です。統一 `read`/`search` ラッパーではありません。
 `agent-reach doctor --json` が選んだ `active_backend` をエージェントが直接呼びます。
 
-対応: GitHub、Twitter/X、YouTube、Reddit、Bilibili、XiaoHongShu、
-LinkedIn、Xiaoyuzhou、V2EX、Xueqiu、RSS、Exa Search、Web。
+対応: GitHub、Twitter/X、YouTube、Reddit、Bilibili（公開検索 API のみ）、
+LinkedIn、V2EX、RSS、Exa Search、Web。
 Exa は mcporter 経由で API key 不要です。Reddit はログインが必須です。
+`doctor` は既定でオフラインです。Web/Exa/Bilibili/V2EX/LinkedIn の外部通信を
+伴う探測は `--live` を付けたときのみ実行されます。
 
 ## 安全なインストール
 
@@ -33,6 +35,7 @@ token は `gh` 自身が保存し、Agent Reach はコピーを保持しませ�
 ## 診断とスキル
 
 ```bash
+agent-reach doctor --live
 agent-reach doctor --json
 agent-reach skill --install
 ```

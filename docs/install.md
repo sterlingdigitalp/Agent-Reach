@@ -9,8 +9,10 @@ afterward, the agent invokes those tools directly.
 - `--dry-run`, `--safe`, and `doctor` never write Agent Reach files or
   directories. Note that health probes execute upstream status commands
   (`gh auth status`, `mcporter config list`, …) which may write their own
-  state files, and the `web`/`exa_search`/`bilibili`/`v2ex`/`xueqiu` probes
-  make outbound network requests to their respective services.
+  state files, and the `web`/`exa_search`/`bilibili`/`v2ex`/`linkedin` probes
+  make outbound network requests to their respective services — `doctor` is
+  offline by default and reports those as `skipped`; pass `doctor --live` to
+  actually run them.
 - `--yes` is required for user-level package/configuration changes.
 - Agent Reach never runs elevation, a system package manager, or a downloaded
   setup script. Missing GitHub CLI, Node.js, ffmpeg, and similar system tools
@@ -45,26 +47,28 @@ agent-reach install --env=auto --dry-run
 agent-reach install --env=auto --yes
 ```
 
-Optional channels are opt-in:
+Optional channels are opt-in (`twitter`, `reddit`, `linkedin`, or `all`):
 
 ```bash
-agent-reach install --env=auto --channels=twitter,xiaoyuzhou --dry-run
-agent-reach install --env=auto --channels=twitter,xiaoyuzhou --yes
+agent-reach install --env=auto --channels=twitter,reddit --dry-run
+agent-reach install --env=auto --channels=twitter,reddit --yes
 ```
 
 OpenCLI requires a desktop Chrome session and a manual extension click.
-Xiaoyuzhou's compatibility script is installed only when that channel is
-selected. LinkedIn's MCP endpoint is `http://localhost:8001/mcp`.
+LinkedIn's MCP endpoint is `http://localhost:8001/mcp`.
 
 ## 3. Diagnose
 
 ```bash
 agent-reach doctor
+agent-reach doctor --live
 agent-reach doctor --json
 ```
 
-Both forms are strictly read-only. JSON includes `active_backend` and explicit
-per-capability readiness.
+All forms are strictly read-only. `doctor` is offline by default; the
+`web`/`exa_search`/`bilibili`/`v2ex`/`linkedin` probes that make outbound
+network requests report `status: "skipped"` unless `--live` is passed. JSON
+includes `active_backend` and explicit per-capability readiness.
 
 ## 4. Configure without exposing secrets
 
@@ -88,16 +92,18 @@ printf '%s' "$GH_TOKEN" | agent-reach configure github-token --stdin
 The GitHub token is handed to `gh auth login --with-token`; Agent Reach keeps
 no copy. Twitter credentials are stored owner-only and injected into Agent
 Reach's health probe; direct `twitter` calls still need
-`TWITTER_AUTH_TOKEN`/`TWITTER_CT0` in their process environment. YouTube
-browser selection is written to the platform-correct yt-dlp config:
+`TWITTER_AUTH_TOKEN`/`TWITTER_CT0` in their process environment. The Twitter
+probe itself never invokes `twitter-cli` unless both variables are configured,
+so a health check never triggers a macOS Keychain prompt. YouTube browser
+selection is written to the platform-correct yt-dlp config:
 
 ```bash
 agent-reach configure youtube-cookies firefox
 ```
 
-Browser auto-import persists only credentials with a verified consumer.
-XiaoHongShu and Bilibili use OpenCLI/upstream login flows instead of unused
-Agent Reach cookie keys.
+Browser auto-import (`configure --from-browser`) extracts Twitter's
+`auth_token` and `ct0` only — it does not persist cookies for any other
+channel. Bilibili uses its public search API and needs no cookies.
 
 ## 5. Install or sync the packaged skill
 

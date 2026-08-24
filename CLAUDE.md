@@ -15,8 +15,8 @@ python -m pytest -q
 python -m ruff check agent_reach tests
 python -m ruff format --check agent_reach tests
 python -m mypy agent_reach
-bash -n test.sh agent_reach/scripts/transcribe_xiaoyuzhou.sh
-shellcheck test.sh agent_reach/scripts/transcribe_xiaoyuzhou.sh
+bash -n test.sh
+shellcheck test.sh
 python -m pip_audit -r constraints.txt --progress-spinner off
 ```
 

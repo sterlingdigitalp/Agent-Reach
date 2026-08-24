@@ -20,9 +20,9 @@ python -m ruff check agent_reach tests scripts
 python -m ruff format --check agent_reach tests scripts
 python -m mypy agent_reach
 
-bash -n test.sh agent_reach/scripts/transcribe_xiaoyuzhou.sh
+bash -n test.sh
 if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck test.sh agent_reach/scripts/transcribe_xiaoyuzhou.sh
+    shellcheck test.sh
 else
     echo "shellcheck is required for the complete release gate" >&2
     exit 1

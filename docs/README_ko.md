@@ -1,12 +1,14 @@
 # Agent Reach
 
-Agent Reach는 13개 인터넷 플랫폼의 상위 도구를 설치·설정·진단하는 capability
+Agent Reach는 10개 인터넷 플랫폼의 상위 도구를 설치·설정·진단하는 capability
 layer입니다. 통합 `read`/`search` 래퍼가 아닙니다. 에이전트는
 `agent-reach doctor --json`의 `active_backend`를 직접 호출합니다.
 
-지원 채널: GitHub, Twitter/X, YouTube, Reddit, Bilibili, XiaoHongShu,
-LinkedIn, Xiaoyuzhou, V2EX, Xueqiu, RSS, Exa Search, Web. Exa는 mcporter를
-통해 API key 없이 사용하며 Reddit은 로그인이 필요합니다.
+지원 채널: GitHub, Twitter/X, YouTube, Reddit, Bilibili(공개 검색 API만),
+LinkedIn, V2EX, RSS, Exa Search, Web. Exa는 mcporter를 통해 API key 없이
+사용하며 Reddit은 로그인이 필요합니다. `doctor`는 기본적으로 오프라인이며,
+Web/Exa/Bilibili/V2EX/LinkedIn처럼 외부 네트워크 요청을 하는 프로브는
+`--live`를 사용할 때만 실행됩니다.
 
 ## 안전한 설치
 
@@ -33,6 +35,7 @@ token은 `gh`가 저장하며 Agent Reach는 복사본을 보관하지 않습니
 ## 진단과 스킬
 
 ```bash
+agent-reach doctor --live
 agent-reach doctor --json
 agent-reach skill --install
 ```

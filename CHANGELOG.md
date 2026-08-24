@@ -8,6 +8,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Channels
+
+- Trimmed the channel set from 13 to 10: removed XiaoHongShu, Xueqiu, and
+  Xiaoyuzhou entirely (channel modules, the `format` subcommand, the
+  `xhs-cookies` configure key, and the XiaoHongShu mcporter entry).
+- Bilibili now uses the public search API only — no bili-cli, no OpenCLI
+  backend, and no cookies.
+
+### Doctor
+
+- `agent-reach doctor` is now offline by default. Probes that make outbound
+  network requests (web, exa_search, bilibili, v2ex, linkedin) are marked
+  `network=True` and report `status: "skipped"` unless `agent-reach doctor
+  --live` is passed.
+- The Twitter probe never executes `twitter-cli` unless
+  `TWITTER_AUTH_TOKEN`/`TWITTER_CT0` are both configured, avoiding an
+  unexpected macOS Keychain popup during a routine health check.
+
 ### Security and correctness
 
 - Made doctor, dry-run, safe mode, and default install planning strictly read-only.
@@ -16,6 +34,11 @@ All notable changes to this project will be documented in this file.
 - Removed secret argv flows in favor of hidden input, stdin, or files.
 - Connected Twitter, GitHub, and YouTube configuration to real upstream consumers;
   stopped persisting unsupported XHS/Bilibili cookie keys.
+- Removed the credential side-channel writers that persisted unused
+  XiaoHongShu/Bilibili/Xueqiu cookie keys; `configure --from-browser` now
+  extracts Twitter's `auth_token`/`ct0` only.
+- Fixed remaining argv-secret code paths so secrets never appear in process
+  argv, favoring hidden prompts, stdin, or files exclusively.
 - Removed known-vulnerable dependency pins and the unused python-dotenv/Playwright surfaces.
 - Hardened the packaged skill against prompt injection, credential disclosure,
   lookalike hosts, unbounded output, and unauthorized writes.
