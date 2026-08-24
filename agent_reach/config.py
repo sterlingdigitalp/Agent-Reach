@@ -22,7 +22,6 @@ class Config:
         "twitter": ["twitter_auth_token", "twitter_ct0"],
         "groq_whisper": ["groq_api_key"],
         "openai_whisper": ["openai_api_key"],
-        "xueqiu": ["xueqiu_cookie"],
     }
 
     ENVIRONMENT_KEYS = {

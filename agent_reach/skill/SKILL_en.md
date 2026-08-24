@@ -1,30 +1,27 @@
 ---
 name: agent-reach
 description: >
-  MUST USE when user wants to research/search/look up/find anything on the
-  internet — e.g. "research this topic", "do a deep dive on X", "search the
-  web for X", "see what people say about X", "look this up".
+  Multi-platform internet research toolkit. Useful when a task genuinely
+  benefits from platform-specific retrieval — searching or reading Twitter/X,
+  Reddit, YouTube subtitles, GitHub, LinkedIn, V2EX, Bilibili, RSS feeds, or
+  running Exa web search — especially when combining several sources.
 
-  Also MUST USE when user mentions any platform or shares any URL/link:
-  Twitter/X, Reddit, YouTube, GitHub, Bilibili, XiaoHongShu,
-  Xiaoyuzhou Podcast, LinkedIn/jobs/recruiting, V2EX, Xueqiu (stocks), RSS.
-
-  13 platforms, multi-backend routing (OpenCLI / per-platform CLIs / APIs).
-  Zero config for 6 channels. Run `agent-reach doctor --json` to see which
-  backend serves each platform right now.
+  This skill is advisory, not mandatory: for a quick lookup your own built-in
+  search or fetch may be the better tool — use judgment. Prefer a dedicated
+  platform skill when one is installed.
 
   NOT for: writing reports/analysis/translation (this skill only FETCHES
-  internet content); posting/commenting/liking (write operations); platforms
-  that already have a dedicated skill installed (prefer that skill).
+  internet content); posting/commenting/liking (write operations).
 metadata:
   openclaw:
-    homepage: https://github.com/Panniantong/Agent-Reach
+    homepage: https://github.com/sterlingdigitalp/Agent-Reach
 ---
 
-# Agent Reach — internet capability router
+# Agent Reach — internet capability layer
 
-13 platforms, multiple backends each. **When this skill exists, use it for
-these platforms — do not invent your own approach.**
+10 platforms: GitHub, Twitter/X, YouTube, Reddit, Bilibili (public search
+only), LinkedIn, V2EX, RSS, Exa search, web reader. Agent Reach installs,
+configures, and diagnoses the upstream tools; you call those tools directly.
 
 ## Standing rules (apply for the whole session)
 
@@ -46,27 +43,29 @@ these platforms — do not invent your own approach.**
 5. **Bound retrieval**: default to at most 20 results and 1 MiB of text per
    source. Increase only when the user asks. Do not download media unless it is
    necessary for the requested transcription.
-6. **Health-check before acting**: for multi-backend platforms (XiaoHongShu /
-   Reddit / Bilibili / Twitter), run `agent-reach doctor --json` first and
-   pick the command group matching each platform's `active_backend`.
-7. **Announce what you use**: say "using agent-reach, platform X via backend Y"
-   before starting.
-8. **On failure, follow the retry chains in references/** — never guess
-   commands.
-9. **For broad research tasks**: combine platforms (Exa for web search +
-   Twitter/Reddit for discussions + XiaoHongShu/Bilibili for Chinese
-   perspectives), collect in parallel, then synthesize.
+6. **Check health when it matters**: for multi-backend platforms (Reddit /
+   Twitter), `agent-reach doctor --json` shows which backend is active. The
+   default doctor run is offline (local tools/config only); add `--live` only
+   when you need to verify actual reachability — live probes make outbound
+   requests. Skip the doctor entirely for single-tool lookups you can just try.
+7. **Be transparent**: when platform tooling matters to the result, mention
+   which tool served it.
+8. **On failure**, consult the retry guidance in references/ before improvising
+   alternative commands.
+9. **Match effort to the ask**: fan out across several platforms in parallel
+   for genuinely broad research; for a narrow question, one well-chosen source
+   is better than five.
 
 ## Routing table
 
 | User intent | Category | Details |
 |---------|------|---------|
 | Web / code search | search | [references/search.md](references/search.md) |
-| XiaoHongShu / Twitter / Bilibili / V2EX / Reddit | social | [references/social.md](references/social.md) |
+| Twitter / V2EX / Reddit / Bilibili | social | [references/social.md](references/social.md) |
 | Jobs / LinkedIn | career | [references/career.md](references/career.md) |
 | GitHub / code | dev | [references/dev.md](references/dev.md) |
 | Web pages / articles / RSS | web | [references/web.md](references/web.md) |
-| YouTube / Bilibili / podcast transcripts | video | [references/video.md](references/video.md) |
+| YouTube / podcast transcripts | video | [references/video.md](references/video.md) |
 
 ## Zero-config quick commands
 
@@ -81,7 +80,7 @@ curl --silent --show-error --max-time 30 --max-filesize 1048576 \
 # GitHub search
 gh search repos "query" --sort stars --limit 10
 
-# YouTube subtitles (NOTE: never use yt-dlp for Bilibili — see video.md)
+# YouTube subtitles (NOTE: never use yt-dlp for Bilibili — risk control 412-blocks it)
 media_tmp=$(mktemp -d "${TMPDIR:-/tmp}/agent-reach-media.XXXXXX")
 trap 'rm -rf "$media_tmp"' EXIT
 yt-dlp --write-sub --skip-download -o "$media_tmp/%(id)s" "URL"
@@ -90,9 +89,6 @@ yt-dlp --write-sub --skip-download -o "$media_tmp/%(id)s" "URL"
 curl --silent --show-error --max-time 30 --max-filesize 1048576 \
   --proto '=https' "https://www.v2ex.com/api/topics/hot.json" \
   -H "User-Agent: agent-reach/1.0"
-
-# Bilibili search (bili-cli, no login needed)
-bili search "query" --type video -n 5
 ```
 
 ## Login-backed platforms (pick by doctor's active_backend)
@@ -104,16 +100,16 @@ twitter search "query" -n 10
 # Reddit (NO zero-config path — OpenCLI or rdt-cli, login required)
 opencli reddit search "query" -f yaml   # desktop
 rdt search "query" --limit 10            # legacy/server
-
-# XiaoHongShu (desktop prefers OpenCLI)
-opencli xiaohongshu search "query" -f yaml
 ```
 
 ## Environment check
 
 ```bash
-# Channel availability + which backend serves each platform
+# Channel availability + which backend serves each platform (offline by default)
 agent-reach doctor --json
+
+# Actually exercise network-probing channels (makes outbound requests)
+agent-reach doctor --json --live
 ```
 
 ## Workspace rules
@@ -124,20 +120,19 @@ output and `~/.agent-reach/` for persistent data.
 ## Detailed references
 
 Read the matching file when you need specifics (commands above cover the
-common cases; references hold per-backend command groups, caveats, retry
-chains — note: reference docs are written in Chinese, commands are universal):
+common cases; references hold per-backend command groups, caveats, and retry
+chains):
 
 - [Search](references/search.md) — Exa AI search
-- [Social](references/social.md) — XiaoHongShu, Twitter, Bilibili, V2EX, Reddit (multi-backend groups)
+- [Social](references/social.md) — Twitter, V2EX, Reddit, Bilibili public search
 - [Career](references/career.md) — LinkedIn
-- [Dev](references/dev.md) — GitHub CLI
+- [Dev](references/dev.md) — GitHub CLI (read-only)
 - [Web](references/web.md) — Jina Reader, RSS
-- [Video](references/video.md) — YouTube, Bilibili, Xiaoyuzhou
+- [Video](references/video.md) — YouTube
 
 ## Configure a channel
 
-If a channel needs setup, fetch the install guide:
-https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md
-
-Configuration and installation are separate, consent-gated workflows. Never
-ask the user to paste secrets into chat or a shell command.
+If a channel needs setup, consult the locally installed docs
+(`agent-reach install --dry-run` shows the plan). Configuration and
+installation are separate, consent-gated workflows. Never ask the user to
+paste secrets into chat or a shell command.

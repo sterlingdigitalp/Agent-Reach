@@ -13,6 +13,7 @@ class WebChannel(Channel):
     description = "任意网页"
     backends = ["Jina Reader"]
     tier = 0
+    network = True  # probe makes an outbound request
 
     def can_handle(self, url: str) -> bool:
         return url.startswith(("http://", "https://"))

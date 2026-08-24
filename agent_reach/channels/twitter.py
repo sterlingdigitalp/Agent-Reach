@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Twitter/X — check if twitter-cli or bird CLI is available."""
 
+import os
+
 from agent_reach.probe import probe_command
 from agent_reach.utils.urls import host_matches
 
@@ -61,7 +63,28 @@ class TwitterChannel(Channel):
         未登录时以非零退出码输出 "not_authenticated"——工具本身是活的，
         所以 probe 的 error 状态也要看 output 内容再分类。
         """
+        import shutil
+
+        # Never exec twitter-cli without credentials in the child env: its
+        # own fallback decrypts browser cookies via the OS keychain, which
+        # pops a blocking security dialog — from a background doctor/watch
+        # run that means orphaned Keychain prompts with nobody to answer
+        # them. Report the unconfigured state without executing anything.
         env = config.subprocess_env("twitter_auth_token", "twitter_ct0") if config else None
+        has_tokens = bool(env and env.get("TWITTER_AUTH_TOKEN") and env.get("TWITTER_CT0"))
+        if not has_tokens:
+            has_tokens = bool(
+                os.environ.get("TWITTER_AUTH_TOKEN") and os.environ.get("TWITTER_CT0")
+            )
+        if not has_tokens:
+            if shutil.which("twitter") is None:
+                return None
+            return "warn", (
+                "twitter-cli 已安装但未配置凭据（为避免钥匙串弹窗，未执行探测）。\n"
+                "配置方式：agent-reach configure --from-browser chrome\n"
+                "或 printf '%s' \"$TWITTER_AUTH_TOKEN\" | "
+                "agent-reach configure twitter-cookies --stdin"
+            )
         probe = probe_command(
             "twitter",
             ["status"],

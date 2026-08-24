@@ -66,7 +66,7 @@ class TestCLI:
         home = tmp_path / "home"
         monkeypatch.setenv("HOME", str(home))
         monkeypatch.setattr(cli, "_detect_environment", lambda: "local")
-        monkeypatch.setattr("agent_reach.doctor.check_all", lambda _config: {})
+        monkeypatch.setattr("agent_reach.doctor.check_all", lambda _config, **_kw: {})
         with patch("sys.argv", ["agent-reach", "install"]):
             main()
         assert not home.exists()

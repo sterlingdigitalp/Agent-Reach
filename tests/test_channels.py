@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import http.cookiejar
 import json
 from urllib.error import URLError
 
 from agent_reach.channels import get_all_channels, get_channel
-from agent_reach.channels.bilibili import BilibiliChannel
 from agent_reach.channels.linkedin import LinkedInChannel
 from agent_reach.channels.reddit import RedditChannel
 from agent_reach.channels.v2ex import V2EXChannel
-from agent_reach.channels.xiaohongshu import XiaoHongShuChannel
-from agent_reach.channels.xueqiu import XueqiuChannel
 from agent_reach.config import Config
 
 
@@ -37,7 +33,7 @@ class FakeResponse:
 def test_registry_returns_fresh_instances():
     first = get_all_channels()
     second = get_all_channels()
-    assert len(first) == 13
+    assert len(first) == 10
     assert [channel.name for channel in first] == [channel.name for channel in second]
     assert all(left is not right for left, right in zip(first, second))
     assert get_channel("github").name == "github"
@@ -68,61 +64,6 @@ def test_v2ex_probe_network_failure_is_degraded(monkeypatch):
     assert status == "warn"
 
 
-def test_xueqiu_probe_uses_supplied_config(monkeypatch, tmp_path):
-    config = Config(config_path=tmp_path / "config.yaml")
-    config.set("xueqiu_cookie", "xq_a_token=test; xq_is_login=1")
-    captured = {}
-
-    channel = XueqiuChannel()
-
-    def fake_open(request, timeout=None):
-        captured["cookie"] = channel._session.cookie_jar
-        captured["referer"] = request.get_header("Referer")
-        captured["ua"] = request.get_header("User-agent")
-        return FakeResponse({"data": {"items": [{"quote": {"symbol": "SH000001"}}]}})
-
-    monkeypatch.setattr(channel._session.opener, "open", fake_open)
-    status, _ = channel.check(config)
-    assert status == "ok"
-    assert captured["referer"] == "https://xueqiu.com/"
-    assert "Mozilla" in captured["ua"]
-    assert any(cookie.name == "xq_a_token" for cookie in captured["cookie"])
-    assert not hasattr(XueqiuChannel(), "get_stock_quote")
-
-
-def test_xueqiu_rookiepy_failure_falls_back_to_browser_cookie3(monkeypatch):
-    import sys
-    import types
-
-    import agent_reach.channels.xueqiu as module
-
-    rookiepy = types.SimpleNamespace(
-        chrome=lambda _domains: (_ for _ in ()).throw(ValueError("bad"))
-    )
-    cookie = http.cookiejar.Cookie(
-        0,
-        "xq_a_token",
-        "ok",
-        None,
-        False,
-        ".xueqiu.com",
-        True,
-        True,
-        "/",
-        True,
-        True,
-        None,
-        True,
-        None,
-        None,
-        {},
-    )
-    browser_cookie3 = types.SimpleNamespace(chrome=lambda **_kwargs: [cookie])
-    monkeypatch.setitem(sys.modules, "rookiepy", rookiepy)
-    monkeypatch.setitem(sys.modules, "browser_cookie3", browser_cookie3)
-    assert module._XueqiuSession().load_cookies_from_browser() is True
-
-
 def test_reddit_backend_selection(monkeypatch):
     channel = RedditChannel()
     monkeypatch.setattr(channel, "_check_opencli", lambda: ("warn", "not ready"))
@@ -139,45 +80,6 @@ def test_reddit_no_backend_is_off(monkeypatch):
     status, _ = channel.check()
     assert status == "off"
     assert channel.active_backend is None
-
-
-def test_xhs_backend_selection(monkeypatch):
-    channel = XiaoHongShuChannel()
-    monkeypatch.setattr(channel, "_check_opencli", lambda: None)
-    monkeypatch.setattr(channel, "_check_mcp", lambda: ("ok", "mcp ready"))
-    monkeypatch.setattr(channel, "_check_xhs_cli", lambda: ("warn", "legacy"))
-    status, _ = channel.check()
-    assert status == "ok"
-    assert channel.active_backend == "xiaohongshu-mcp"
-
-
-def test_xhs_no_backend_is_off(monkeypatch):
-    channel = XiaoHongShuChannel()
-    monkeypatch.setattr(channel, "_check_opencli", lambda: None)
-    monkeypatch.setattr(channel, "_check_mcp", lambda: None)
-    monkeypatch.setattr(channel, "_check_xhs_cli", lambda: None)
-    status, _ = channel.check()
-    assert status == "off"
-
-
-def test_bilibili_limited_api_is_degraded(monkeypatch):
-    channel = BilibiliChannel()
-    monkeypatch.setattr(channel, "_check_bili_cli", lambda: None)
-    monkeypatch.setattr(channel, "_check_opencli", lambda: None)
-    monkeypatch.setattr(channel, "_check_search_api", lambda: ("warn", "search only"))
-    status, _ = channel.check()
-    assert status == "warn"
-    assert channel.active_backend == "B站搜索 API"
-
-
-def test_bilibili_healthy_cli_wins(monkeypatch):
-    channel = BilibiliChannel()
-    monkeypatch.setattr(channel, "_check_bili_cli", lambda: ("ok", "full"))
-    monkeypatch.setattr(channel, "_check_opencli", lambda: ("warn", "not ready"))
-    monkeypatch.setattr(channel, "_check_search_api", lambda: ("warn", "search only"))
-    status, _ = channel.check()
-    assert status == "ok"
-    assert channel.active_backend == "bili-cli"
 
 
 def test_linkedin_mcp_requires_config_and_live_service(monkeypatch):
@@ -267,17 +169,6 @@ def test_exa_requires_a_successful_live_read_only_query(monkeypatch):
     assert "真实只读查询失败" in message
     assert calls[1][0] == "call"
     assert "web_search_exa" in calls[1][1]
-
-
-def test_xiaoyuzhou_ffmpeg_broken(monkeypatch):
-    from agent_reach.channels.xiaoyuzhou import XiaoyuzhouChannel
-
-    monkeypatch.setattr(
-        "agent_reach.channels.xiaoyuzhou.probe_command",
-        lambda *_args, **_kwargs: type("Probe", (), {"status": "broken", "ok": False})(),
-    )
-    status, _ = XiaoyuzhouChannel().check()
-    assert status == "error"
 
 
 def test_exact_host_checks_reject_lookalikes():

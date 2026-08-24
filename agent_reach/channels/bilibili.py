@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Bilibili — multi-backend: bili-cli / OpenCLI / search API.
+"""Bilibili — credential-free public search API only.
 
-yt-dlp was REMOVED from this channel (live-verified 2026-06): bilibili's
-risk control 412-blocks yt-dlp's requests in every configuration we
-tried — latest version, direct, proxied, with warmed cookies — while
-bili-cli keeps working (search/hot/video detail without login) and
-OpenCLI covers subtitles through the browser session. yt-dlp remains the
-YouTube backend; it just no longer serves bilibili.
+This channel is deliberately reduced to the logged-out search API. The
+former bili-cli backend (unmaintained upstream since 2026-03) and the
+OpenCLI browser-session backend (reuses your logged-in browser state)
+were removed: this fork keeps Bilibili strictly as a zero-credential
+search expander, never a cookie consumer.
+
+yt-dlp was REMOVED from this channel earlier (live-verified 2026-06):
+bilibili's risk control 412-blocks yt-dlp's requests in every
+configuration tried. yt-dlp remains the YouTube backend only.
 """
 
 import json
 import urllib.request
 
 from agent_reach.models import CapabilityReadiness
-from agent_reach.probe import probe_command
 from agent_reach.utils.urls import host_matches
 
 from .base import Channel
@@ -36,97 +38,24 @@ def _search_api_ok() -> bool:
 
 class BilibiliChannel(Channel):
     name = "bilibili"
-    description = "B站视频、字幕和搜索"
-    backends = ["bili-cli", "OpenCLI", "B站搜索 API"]
+    description = "B站公开搜索（无凭据、无登录态）"
+    backends = ["B站搜索 API"]
     tier = 1
-    capabilities = ("metadata", "search", "subtitles")
+    network = True  # probe makes an outbound request
+    capabilities = ("search",)
 
     def can_handle(self, url: str) -> bool:
         return host_matches(url, "bilibili.com", "b23.tv")
 
     def check(self, config=None):
-        """Probe candidates in order; first fully-usable backend wins."""
+        """Live-probe the public search API (network — only runs in --live doctor)."""
         self.active_backend = None
-        findings = []
-
-        for backend in self.ordered_backends(config):
-            if backend == "bili-cli":
-                result = self._check_bili_cli()
-            elif backend == "OpenCLI":
-                result = self._check_opencli()
-            else:
-                result = self._check_search_api()
-            if result is None:
-                continue
-            findings.append((backend, *result))
-
-        # 有后端断链时，即使别的候选兜底成功也要把处方带出来
-        broken_notes = [m for _, s, m in findings if s == "error"]
-
-        for wanted in ("ok", "warn"):
-            for backend, status, message in findings:
-                if status == wanted:
-                    self.active_backend = backend
-                    if broken_notes:
-                        message += "\n[备选后端异常] " + "；".join(broken_notes)
-                    return status, message
-
-        if findings:
-            return "error", "\n".join(m for _, _, m in findings)
-
-        return "off", (
-            "没有可用的 B站后端（搜索 API 也不可达，可能是网络问题）。推荐：\n"
-            "  审阅固定版本后安装 bili-cli（搜索/热门/视频详情，无需登录）\n"
-            "  或桌面装 OpenCLI（额外解锁字幕）：agent-reach install --channels opencli"
-        )
-
-    def _check_bili_cli(self):
-        """bili-cli candidate. None = not installed."""
-        probe = probe_command("bili", ["--version"], timeout=10, package="bilibili-cli")
-        if probe.status == "missing":
-            return None
-        if probe.status == "broken":
-            return "error", "bili 命令存在但无法执行\n" + probe.hint
-        if not probe.ok:
-            return "warn", f"bili-cli 探测失败（{probe.status}），运行 `bili status` 查看详情"
-        return "ok", (
-            "bili-cli 可用（搜索/热门/排行/视频详情/音频，无需登录；"
-            "字幕需 OpenCLI。上游 2026-03 起停更）"
-        )
-
-    def _check_opencli(self):
-        """OpenCLI candidate. None = not installed."""
-        from agent_reach.backends import opencli_status
-
-        st = opencli_status()
-        if not st.installed:
-            return None
-        if st.broken:
-            return "error", st.hint
-        if st.ready:
-            return "ok", (
-                "OpenCLI 可用（复用浏览器登录态）。用法："
-                "opencli bilibili search/video/subtitle/ranking -f yaml"
-            )
-        return "warn", st.hint
-
-    def _check_search_api(self):
-        """Zero-dependency search API fallback. None = unreachable."""
-        if not _search_api_ok():
-            return None
-        return "warn", (
-            "B站搜索 API 可达（仅搜索，curl 直连）。"
-            "完整功能需要用户另行审阅并安装固定版本的 bili-cli"
-        )
+        if _search_api_ok():
+            self.active_backend = self.backends[0]
+            return "ok", "B站公开搜索 API 可达（仅搜索，无凭据，curl 直连）"
+        return "warn", "B站搜索 API 不可达（可能是网络问题）"
 
     def capability_readiness(self, status, message):
-        if self.active_backend == "B站搜索 API":
-            return {
-                "metadata": CapabilityReadiness("unavailable", None, message),
-                "search": CapabilityReadiness("ready", self.active_backend, message),
-                "subtitles": CapabilityReadiness("unavailable", None, message),
-            }
-        readiness = super().capability_readiness(status, message)
-        if self.active_backend == "bili-cli" and status == "ok":
-            readiness["subtitles"] = CapabilityReadiness("unavailable", None, message)
-        return readiness
+        state = "ready" if status == "ok" else "unavailable"
+        backend = self.active_backend if status == "ok" else None
+        return {"search": CapabilityReadiness(state, backend, message)}

@@ -49,7 +49,7 @@ def test_channel_active_backend_set_by_check(monkeypatch, tmp_path):
     """After check(), active_backend is None or a str — never anything else."""
     monkeypatch.setattr("shutil.which", lambda _cmd: None)
 
-    # Keep the network-based channels (V2EX/Xueqiu/Bilibili API) deterministic.
+    # Keep the network-based channels (V2EX/Bilibili API) deterministic.
     import urllib.request
     from urllib.error import URLError
 
@@ -57,12 +57,7 @@ def test_channel_active_backend_set_by_check(monkeypatch, tmp_path):
         raise URLError("offline")
 
     monkeypatch.setattr(urllib.request, "urlopen", _no_net)
-    import agent_reach.channels.xueqiu as xueqiu_mod
-
-    # Block every built opener (covers each channel instance's private
-    # _XueqiuSession opener) and keep browser cookie stores untouched.
     monkeypatch.setattr(urllib.request.OpenerDirector, "open", _no_net)
-    monkeypatch.setattr(xueqiu_mod._XueqiuSession, "load_cookies_from_browser", lambda self: False)
 
     config = Config(config_path=tmp_path / "config.yaml")
     for ch in get_all_channels():
@@ -173,10 +168,8 @@ def test_channel_can_handle_contract():
         "youtube": "https://youtube.com/watch?v=abc",
         "reddit": "https://reddit.com/r/python",
         "bilibili": "https://www.bilibili.com/video/BV1xx411",
-        "xiaohongshu": "https://www.xiaohongshu.com/explore/123",
         "linkedin": "https://www.linkedin.com/in/test",
         "rss": "https://example.com/feed.xml",
-        "xueqiu": "https://xueqiu.com/S/SH600519",
         "exa_search": "https://example.com",
         "web": "https://example.com",
     }

@@ -21,6 +21,10 @@ def test_check_twitter_cli_found_and_auth_ok():
     """twitter-cli found + twitter status ok → ok."""
     channel = TwitterChannel()
     with (
+        patch.dict(
+            "os.environ",
+            {"TWITTER_AUTH_TOKEN": "tok", "TWITTER_CT0": "ct0"},
+        ),
         patch(
             "shutil.which",
             side_effect=lambda name: "/usr/local/bin/twitter" if name == "twitter" else None,
@@ -41,6 +45,10 @@ def test_check_twitter_cli_found_auth_missing():
     """twitter-cli found + not_authenticated → warn about auth."""
     channel = TwitterChannel()
     with (
+        patch.dict(
+            "os.environ",
+            {"TWITTER_AUTH_TOKEN": "tok", "TWITTER_CT0": "ct0"},
+        ),
         patch(
             "shutil.which",
             side_effect=lambda name: "/usr/local/bin/twitter" if name == "twitter" else None,
@@ -134,6 +142,10 @@ def test_twitter_cli_preferred_over_bird():
         return None
 
     with (
+        patch.dict(
+            "os.environ",
+            {"TWITTER_AUTH_TOKEN": "tok", "TWITTER_CT0": "ct0"},
+        ),
         patch("shutil.which", side_effect=which_side_effect),
         patch(
             "subprocess.run",
@@ -153,6 +165,10 @@ def test_check_twitter_cli_broken_reports_error_with_reinstall_hint():
     """which 命中但 exec 抛 FileNotFoundError（venv 断链）→ error + 重装处方。"""
     channel = TwitterChannel()
     with (
+        patch.dict(
+            "os.environ",
+            {"TWITTER_AUTH_TOKEN": "tok", "TWITTER_CT0": "ct0"},
+        ),
         patch(
             "shutil.which",
             side_effect=lambda name: "/usr/local/bin/twitter" if name == "twitter" else None,
@@ -182,6 +198,10 @@ def test_check_twitter_cli_broken_falls_back_to_bird():
         return _cp(stdout="Authenticated as @user\n", returncode=0)
 
     with (
+        patch.dict(
+            "os.environ",
+            {"TWITTER_AUTH_TOKEN": "tok", "TWITTER_CT0": "ct0"},
+        ),
         patch("shutil.which", side_effect=which_side_effect),
         patch("subprocess.run", side_effect=run_side_effect),
     ):
@@ -246,3 +266,27 @@ def test_saved_twitter_credentials_reach_probe_environment(tmp_path):
     env = call.call_args_list[0].kwargs["env"]
     assert env["TWITTER_AUTH_TOKEN"] == "saved-auth"
     assert env["TWITTER_CT0"] == "saved-ct0"
+
+
+def test_no_tokens_never_executes_twitter_cli():
+    """未配置凭据时绝不执行 twitter-cli — 防止后台 doctor 触发钥匙串弹窗。"""
+    channel = TwitterChannel()
+
+    def which_side_effect(name):
+        return "/usr/local/bin/twitter" if name == "twitter" else None
+
+    with (
+        patch.dict("os.environ", {}, clear=False),
+        patch("shutil.which", side_effect=which_side_effect),
+        patch("subprocess.run") as run_mock,
+    ):
+        import os as _os
+
+        _os.environ.pop("TWITTER_AUTH_TOKEN", None)
+        _os.environ.pop("TWITTER_CT0", None)
+        status, message = channel.check()
+
+    twitter_calls = [c for c in run_mock.call_args_list if "twitter" in str(c.args[0])]
+    assert not twitter_calls, "twitter-cli must not be executed without configured tokens"
+    assert status == "warn"
+    assert "未配置凭据" in message

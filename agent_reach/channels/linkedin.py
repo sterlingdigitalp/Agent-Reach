@@ -32,6 +32,7 @@ class LinkedInChannel(Channel):
     description = "LinkedIn 职业社交"
     backends = ["linkedin-scraper-mcp", "Jina Reader"]
     tier = 2
+    network = True  # probe makes an outbound request
     capabilities = ("read", "profile", "job_search")
 
     def can_handle(self, url: str) -> bool:

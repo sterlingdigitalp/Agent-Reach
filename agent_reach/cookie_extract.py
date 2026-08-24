@@ -2,7 +2,7 @@
 """Auto-extract cookies from local browsers for all supported platforms.
 
 Supports: Chrome, Firefox, Edge, Brave, Opera
-Extracts: Twitter, XiaoHongShu, Bilibili cookies in one shot.
+Extracts: Twitter (auth_token + ct0) only — this fork's other channels are credential-free.
 
 Usage:
     agent-reach configure --from-browser chrome
@@ -18,24 +18,6 @@ PLATFORM_SPECS: list[dict[str, Any]] = [
         "cookies": ["auth_token", "ct0"],
         "config_key": "twitter",
     },
-    {
-        "name": "XiaoHongShu",
-        "domains": [".xiaohongshu.com"],
-        "cookies": None,  # None = grab all cookies as header string
-        "config_key": "xhs",
-    },
-    {
-        "name": "Bilibili",
-        "domains": [".bilibili.com"],
-        "cookies": ["SESSDATA", "bili_jct"],
-        "config_key": "bilibili",
-    },
-    {
-        "name": "Xueqiu",
-        "domains": [".xueqiu.com", "xueqiu.com"],
-        "cookies": None,  # grab all — xq_a_token + session cookies required
-        "config_key": "xueqiu",
-    },
 ]
 
 
@@ -46,8 +28,6 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
     Returns:
         {
             "twitter": {"auth_token": "xxx", "ct0": "yyy"},
-            "xhs": {"cookie_string": "a=1; b=2; ..."},
-            "bilibili": {"SESSDATA": "xxx", "bili_jct": "yyy"},
         }
     """
     # Try rookiepy first (Rust-based, more stable), fallback to browser_cookie3
@@ -163,7 +143,7 @@ def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
                 "All platforms",
                 False,
                 f"No platform cookies found in {browser}. "
-                f"Make sure you're logged into Twitter, XiaoHongShu, etc. in {browser}.",
+                f"Make sure you're logged into x.com in {browser}.",
             )
         ]
 
@@ -183,43 +163,6 @@ def configure_from_browser(browser: str, config) -> List[Tuple[str, bool, str]]:
                     False,
                     f"Found {found}, but missing: {', '.join(missing)}. "
                     f"Make sure you're logged into x.com in {browser}.",
-                )
-            )
-
-    if "xhs" in extracted:
-        results_list.append(
-            (
-                "XiaoHongShu",
-                False,
-                "cookies found but not persisted: use OpenCLI's browser session or "
-                "xiaohongshu-mcp's login flow",
-            )
-        )
-
-    if "bilibili" in extracted:
-        results_list.append(
-            (
-                "Bilibili",
-                False,
-                "cookies found but not persisted: current bili-cli/OpenCLI backends "
-                "do not consume Agent Reach cookie storage",
-            )
-        )
-
-    if "xueqiu" in extracted:
-        cookie_str = extracted["xueqiu"].get("cookie_string", "")
-        # Only save if xq_a_token is present — anonymous cookies are useless
-        if cookie_str and "xq_a_token" in cookie_str:
-            config.set("xueqiu_cookie", cookie_str)
-            n_cookies = len(cookie_str.split(";"))
-            results_list.append(("Xueqiu", True, f"{n_cookies} cookies (含 xq_a_token)"))
-        elif cookie_str:
-            results_list.append(
-                (
-                    "Xueqiu",
-                    False,
-                    f"找到 {len(cookie_str.split(';'))} 个 Cookie 但缺少 xq_a_token，"
-                    f"请先在 {browser} 中登录 xueqiu.com",
                 )
             )
 

@@ -92,9 +92,7 @@ def main():
     p_install.add_argument(
         "--channels",
         default="",
-        help="Comma-separated optional channels to install "
-        "(twitter,xiaoyuzhou,xueqiu,xiaohongshu,"
-        "reddit,bilibili,linkedin,all)",
+        help="Comma-separated optional channels to install (twitter,reddit,linkedin,all)",
     )
 
     # ── configure ──
@@ -109,7 +107,6 @@ def main():
             "openai-key",
             "twitter-cookies",
             "youtube-cookies",
-            "xhs-cookies",
         ],
         help="What to configure (omit if using --from-browser)",
     )
@@ -143,6 +140,12 @@ def main():
         action="store_true",
         help="Output machine-readable JSON instead of the text report",
     )
+    p_doctor.add_argument(
+        "--live",
+        action="store_true",
+        help="Also run probes that make outbound network requests "
+        "(skipped by default so a health check never leaks your IP)",
+    )
 
     # ── uninstall ──
     p_uninstall = sub.add_parser(
@@ -173,10 +176,6 @@ def main():
         action="store_true",
         help="Replace an existing customized skill installation",
     )
-
-    # ── format ──
-    p_format = sub.add_parser("format", help="Clean and format platform API output")
-    p_format.add_argument("platform", choices=["xhs"], help="Platform to format (xhs)")
 
     # ── check-update ──
     # ── transcribe ──
@@ -245,8 +244,6 @@ def main():
         result = _cmd_uninstall(args)
     elif args.command == "skill":
         result = _cmd_skill(args)
-    elif args.command == "format":
-        result = _cmd_format(args)
     elif args.command == "transcribe":
         result = _cmd_transcribe(args)
     if result == "error":
@@ -292,21 +289,18 @@ def _cmd_install(args):
     # ── Parse --channels ──
     CHANNEL_INSTALLERS = {
         "twitter": _install_twitter_deps,
-        "xiaoyuzhou": _install_xiaoyuzhou_deps,
-        "xiaohongshu": _install_xhs_deps,
         "reddit": _install_reddit_deps,
         "bilibili": _install_bili_deps,
         "opencli": _install_opencli_deps,  # cross-channel backend, desktop only
-        # xueqiu: cookie-only, no install step
         # linkedin: manual setup, no auto-install
     }
-    COOKIE_CHANNELS = {"twitter", "xueqiu", "bilibili"}
+    COOKIE_CHANNELS = {"twitter"}
 
     requested_channels = set()
     if args.channels:
         raw = [c.strip().lower() for c in args.channels.split(",") if c.strip()]
         if "all" in raw:
-            requested_channels = set(CHANNEL_INSTALLERS.keys()) | {"xueqiu", "linkedin"}
+            requested_channels = set(CHANNEL_INSTALLERS.keys()) | {"linkedin"}
         else:
             requested_channels = set(raw)
 
@@ -399,7 +393,7 @@ def _cmd_install(args):
     if not dry_run:
         print()
         print("Testing channels...")
-        health_results = check_all(config)
+        health_results = check_all(config, live=True)
         ok = sum(1 for result in health_results.values() if result["status"] == "ok")
         total = len(health_results)
 
@@ -421,7 +415,7 @@ def _cmd_install(args):
             # First install — hint about optional channels
             print()
             print("More channels available! Use --channels to install:")
-            print("   agent-reach install --channels=twitter,xiaohongshu,reddit,...")
+            print("   agent-reach install --channels=twitter,reddit,...")
             print("   agent-reach install --channels=all  (install everything)")
 
         # Star reminder
@@ -604,28 +598,6 @@ def _cmd_skill(args):
         _uninstall_skill()
 
 
-def _cmd_format(args):
-    """Clean and format platform API output from stdin."""
-    import json
-    import sys
-
-    if args.platform == "xhs":
-        from agent_reach.channels.xiaohongshu import format_xhs_result
-
-        raw = sys.stdin.read().strip()
-        if not raw:
-            print("Error: no input on stdin", file=sys.stderr)
-            sys.exit(1)
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as e:
-            print(f"Error: invalid JSON: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        cleaned = format_xhs_result(data)
-        print(json.dumps(cleaned, ensure_ascii=False, indent=2))
-
-
 def _install_system_deps():
     """Inspect system dependencies without crossing privilege boundaries.
 
@@ -665,54 +637,9 @@ def _install_system_deps():
         except OSError as exc:
             print(f"  -- Could not configure yt-dlp JS runtime: {exc}")
 
-    # NOTE: twitter-cli, xiaoyuzhou, xhs-cli etc. are optional.
+    # NOTE: twitter-cli etc. are optional.
     # They are installed via --channels flag, not here.
     # See CHANNEL_INSTALLERS in _cmd_install().
-
-
-def _install_xiaoyuzhou_deps():
-    """Install Xiaoyuzhou podcast transcription script."""
-    import shutil
-
-    from agent_reach.config import Config
-
-    config = Config()
-    print("Setting up Xiaoyuzhou podcast transcription...")
-
-    tools_dir = os.path.expanduser("~/.agent-reach/tools/xiaoyuzhou")
-    script_dst = os.path.join(tools_dir, "transcribe.sh")
-
-    if os.path.isfile(script_dst):
-        print("  ✅ Xiaoyuzhou transcription script already installed")
-    else:
-        # Copy script from package
-        script_src = os.path.join(os.path.dirname(__file__), "scripts", "transcribe_xiaoyuzhou.sh")
-        if os.path.isfile(script_src):
-            try:
-                os.makedirs(tools_dir, exist_ok=True)
-                import shutil as _shutil
-
-                _shutil.copy2(script_src, script_dst)
-                os.chmod(script_dst, 0o755)
-                print("  ✅ Xiaoyuzhou transcription script installed")
-            except Exception as e:
-                print(f"  [!]  Failed to install script: {e}")
-        else:
-            print("  [!]  Script source not found in package")
-
-    # Check ffmpeg
-    if shutil.which("ffmpeg"):
-        print("  ✅ ffmpeg available")
-    else:
-        print("  -- ffmpeg not found. Install: apt install -y ffmpeg (or brew install ffmpeg)")
-
-    # Check GROQ_API_KEY
-    has_key = bool(os.environ.get("GROQ_API_KEY")) or bool(config.get("groq_api_key"))
-    if has_key:
-        print("  ✅ Groq API key configured")
-    else:
-        print("  -- Groq API key not set. Get a key at https://console.groq.com")
-        print("     Then run the hidden prompt: agent-reach configure groq-key")
 
 
 def _install_twitter_deps():
@@ -725,32 +652,6 @@ def _install_twitter_deps():
         return
     print("  -- Not auto-installing an unpinned external package.")
     print("     Review an exact twitter-cli release, then install twitter-cli==VERSION.")
-
-
-def _install_xhs_deps():
-    """Set up XiaoHongShu — backend depends on environment.
-
-    Desktop: OpenCLI (reuses the browser session, zero config).
-    Server: xiaohongshu-mcp guide (self-contained headless browser + QR
-    login; we don't manage long-running services, so guide only).
-    xhs-cli is no longer installed by default — upstream unmaintained
-    since 2026-03; existing installs keep working as a fallback backend.
-    """
-    import shutil
-
-    print("Setting up XiaoHongShu...")
-    if _detect_environment() == "server":
-        print("  服务器环境推荐 xiaohongshu-mcp（自带无头浏览器，扫码登录）：")
-        print("    1. 下载 binary：https://github.com/xpzouying/xiaohongshu-mcp/releases")
-        print("       （建议放到 ~/.agent-reach/tools/ 下）")
-        print("    2. 启动服务（首次运行会下载约 150MB 浏览器，请等待完成）")
-        print("    3. 扫码登录后接入：mcporter config add xiaohongshu http://localhost:18060/mcp")
-        print("    4. 验证：agent-reach doctor")
-        return
-
-    _install_opencli_deps()
-    if shutil.which("xhs"):
-        print("  ✅ 检测到存量 xhs-cli，将作为备选后端继续可用")
 
 
 def _install_opencli_deps():
@@ -937,8 +838,6 @@ def _install_mcporter():
             "  [!]  Could not configure Exa. Run manually: mcporter config add exa https://mcp.exa.ai/mcp"
         )
 
-    # NOTE: xhs-cli is now optional, installed via --channels=xiaohongshu
-
 
 def _install_mcporter_safe():
     """Safe mode: check mcporter status, print instructions."""
@@ -1059,7 +958,6 @@ def _cmd_configure(args):
         "groq-key",
         "openai-key",
         "twitter-cookies",
-        "xhs-cookies",
     }
     if args.value and args.key in secret_keys:
         print(
@@ -1168,9 +1066,6 @@ def _cmd_configure(args):
         )
         print(f"✅ yt-dlp cookie source configured in {config_path}: {browser}")
 
-    elif args.key == "xhs-cookies":
-        _configure_xhs_cookies(value)
-
     elif args.key == "github-token":
         import shutil
         import subprocess
@@ -1249,215 +1144,6 @@ def _parse_twitter_cookie_input(value: str):
     return auth_token, ct0
 
 
-def _configure_xhs_cookies(value):
-    """Import cookies into xiaohongshu-mcp Docker container.
-
-    Accepts two formats:
-    1. Cookie-Editor JSON export (array of cookie objects)
-    2. Header String: "name1=value1; name2=value2; ..."
-
-    The xiaohongshu-mcp container stores cookies at $COOKIES_PATH
-    (default: /app/data/cookies.json or cookies.json in workdir).
-    Format: JSON array of {name, value, domain, path, expires, httpOnly, secure, sameSite}.
-    """
-    import json
-    import shutil
-    import subprocess
-
-    value = value.strip()
-    if not value:
-        print("[X] Missing cookie value.")
-        print("   Usage: agent-reach configure xhs-cookies --file <cookies.json>")
-        print("      or: agent-reach configure xhs-cookies --stdin  (pipe the cookie JSON)")
-        return
-
-    # Detect format and parse
-    cookies_json = None
-
-    # Try JSON format first (Cookie-Editor JSON export)
-    if value.startswith("["):
-        try:
-            parsed = json.loads(value)
-            if isinstance(parsed, list) and parsed:
-                # Validate it looks like cookie objects
-                first = parsed[0]
-                if isinstance(first, dict) and "name" in first and "value" in first:
-                    cookies_json = json.dumps(parsed)
-                    print(f"  Parsed {len(parsed)} cookies from JSON format")
-                else:
-                    print("[X] JSON array doesn't contain cookie objects (need name/value fields)")
-                    return
-            else:
-                print("[X] Empty or invalid JSON array")
-                return
-        except json.JSONDecodeError as e:
-            print(f"[X] Invalid JSON: {e}")
-            return
-
-    # Header String format: "key1=val1; key2=val2; ..."
-    if cookies_json is None and "=" in value:
-        cookies = []
-        for part in value.split(";"):
-            part = part.strip()
-            if "=" not in part:
-                continue
-            name, val = part.split("=", 1)
-            name = name.strip()
-            val = val.strip()
-            if name:
-                cookies.append(
-                    {
-                        "name": name,
-                        "value": val,
-                        "domain": ".xiaohongshu.com",
-                        "path": "/",
-                        "expires": -1,
-                        "size": len(name) + len(val),
-                        "httpOnly": False,
-                        "secure": False,
-                        "session": True,
-                        "sameSite": "Lax",
-                    }
-                )
-        if cookies:
-            cookies_json = json.dumps(cookies)
-            print(f"  Parsed {len(cookies)} cookies from Header String format")
-        else:
-            print("[X] Could not parse any cookies from input")
-            return
-
-    if not cookies_json:
-        print("[X] Could not parse cookies. Accepted formats:")
-        print('   1. JSON array: \'[{"name":"x","value":"y","domain":".xiaohongshu.com",...}]\'')
-        print('   2. Header String: "key1=val1; key2=val2; ..."')
-        return
-
-    # Find the container
-    docker = shutil.which("docker")
-    if not docker:
-        # No Docker - write an owner-only local file for manual import.
-        from agent_reach.utils.security import atomic_write_private_text
-
-        cookie_path = os.path.expanduser("~/.agent-reach/xhs-cookies.json")
-        try:
-            atomic_write_private_text(cookie_path, cookies_json)
-        except OSError as exc:
-            print(f"[X] Could not securely save cookies: {exc}")
-            return
-        print(f"  Cookies saved to {cookie_path}")
-        print("  Docker not found. Copy manually:")
-        print(f"  docker cp {cookie_path} xiaohongshu-mcp:/app/data/cookies.json")
-        return
-
-    # Check if xiaohongshu-mcp container is running
-    try:
-        result = subprocess.run(
-            [docker, "ps", "--filter", "name=xiaohongshu-mcp", "--format", "{{.Names}}"],
-            capture_output=True,
-            encoding="utf-8",
-            timeout=5,
-        )
-        container_name = result.stdout.strip()
-        if not container_name:
-            print("[X] xiaohongshu-mcp container is not running.")
-            print("   Start a separately reviewed image pinned by digest, then retry.")
-            return
-    except Exception as e:
-        print(f"[X] Could not check Docker: {e}")
-        return
-
-    # Find the cookies path inside the container
-    try:
-        result = subprocess.run(
-            [docker, "exec", container_name, "printenv", "COOKIES_PATH"],
-            capture_output=True,
-            encoding="utf-8",
-            timeout=5,
-        )
-        cookie_path_in_container = result.stdout.strip()
-        if not cookie_path_in_container:
-            cookie_path_in_container = "/app/cookies.json"  # fallback: absolute path in workdir
-    except Exception:
-        cookie_path_in_container = "/app/cookies.json"
-
-    # Write cookies into the container
-    tmp_path = None
-    try:
-        # Write to temp file then docker cp
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".json",
-            delete=False,
-            encoding="utf-8",
-        ) as f:
-            f.write(cookies_json)
-            tmp_path = f.name
-        os.chmod(tmp_path, 0o600)
-
-        result = subprocess.run(
-            [docker, "cp", tmp_path, f"{container_name}:{cookie_path_in_container}"],
-            capture_output=True,
-            encoding="utf-8",
-            timeout=10,
-        )
-        if result.returncode != 0:
-            print(f"[X] Failed to copy cookies: {result.stderr}")
-            return
-
-        print(f"✅ Cookies written to {container_name}:{cookie_path_in_container}")
-        # Restart container so it reloads cookies from disk
-        print("  Restarting container to reload cookies...", end=" ", flush=True)
-        try:
-            restart_result = subprocess.run(
-                [docker, "restart", container_name],
-                capture_output=True,
-                encoding="utf-8",
-                timeout=30,
-            )
-            if restart_result.returncode == 0:
-                print("done")
-            else:
-                print("failed")
-                print(f"  Restart manually: docker restart {container_name}")
-        except Exception as e:
-            print(f"\n  [!] Could not restart container: {e}")
-            print(f"  Restart manually: docker restart {container_name}")
-    except Exception as e:
-        print(f"[X] Failed to write cookies: {e}")
-        return
-    finally:
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-
-    # Verify login status via mcporter
-    mcporter = shutil.which("mcporter")
-    if mcporter:
-        print("  Verifying login status...", end=" ")
-        try:
-            result = subprocess.run(
-                [mcporter, "call", "xiaohongshu.check_login_status()"],
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=15,
-            )
-            if "已登录" in result.stdout or "logged" in result.stdout.lower():
-                print("✅ Login verified!")
-            else:
-                print("[!] Login check returned unexpected result:")
-                print(f"  {result.stdout.strip()[:200]}")
-                print("  Cookies were written but login might not be valid. Try fresh cookies.")
-        except Exception as e:
-            print(f"[!] Could not verify: {e}")
-    else:
-        print("  (mcporter not found, skipping verification)")
-
-
 def _cmd_uninstall(args):
     """Remove all Agent Reach config, tokens, and skill files."""
     import shutil
@@ -1521,7 +1207,7 @@ def _cmd_uninstall(args):
     # ── 3. mcporter MCP entries ──
     # --keep-config means keep every persisted integration, not only YAML.
     if not keep_config and shutil.which("mcporter"):
-        for mcp_name in ("exa", "xiaohongshu"):
+        for mcp_name in ("exa",):
             try:
                 r = subprocess.run(
                     ["mcporter", "list"],
@@ -1582,7 +1268,7 @@ def _cmd_doctor(args=None):
     except ImportError:
         pass
     config = Config(create=False)
-    results = check_all(config)
+    results = check_all(config, live=bool(args is not None and getattr(args, "live", False)))
 
     if args is not None and getattr(args, "json", False):
         print(json.dumps(results, ensure_ascii=False, indent=2))
@@ -1908,7 +1594,7 @@ def _cmd_watch(args=None):
     # Check channels
     results = check_all(config)
     ok = sum(1 for r in results.values() if r["status"] == "ok")
-    total = len(results)
+    total = sum(1 for r in results.values() if r["status"] != "skipped")
 
     requested = {item.strip() for item in getattr(args, "channels", "").split(",") if item.strip()}
     saved_channels = config.get("watch_channels", [])
@@ -1929,7 +1615,9 @@ def _cmd_watch(args=None):
     for key in sorted(monitored & set(results)):
         result = results[key]
         previous = baseline.get(key)
-        if result["status"] == "ok":
+        if result["status"] in ("ok", "skipped"):
+            # skipped = network probe not run (offline doctor) — no evidence
+            # of regression either way, so never report it as one.
             continue
         prefix = "[X]" if result["status"] in ("off", "error") else "[!]"
         if previous == "ok":

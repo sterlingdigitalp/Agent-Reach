@@ -26,11 +26,8 @@ EXPECTED_CHANNELS = {
     "youtube",
     "reddit",
     "bilibili",
-    "xiaohongshu",
     "linkedin",
-    "xiaoyuzhou",
     "v2ex",
-    "xueqiu",
     "rss",
 }
 
@@ -50,11 +47,8 @@ def test_documented_channel_registry_is_current():
         "youtube",
         "reddit",
         "bilibili",
-        "xiaohongshu",
         "linkedin",
-        "xiaoyuzhou",
         "v2ex",
-        "xueqiu",
         "rss",
     ):
         assert label in llms
@@ -81,7 +75,7 @@ def test_current_guidance_has_no_removed_wrapper_commands_or_stale_endpoint():
 def test_current_guidance_does_not_embed_secrets_in_agent_reach_argv():
     secret_command = re.compile(
         r"^\s*agent-reach configure "
-        r"(?:github-token|groq-key|openai-key|twitter-cookies|xhs-cookies)"
+        r"(?:github-token|groq-key|openai-key|twitter-cookies)"
         r"[ \t]+(?!--stdin\b|--file\b)",
         re.MULTILINE,
     )

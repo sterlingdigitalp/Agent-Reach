@@ -37,6 +37,11 @@ class Channel(ABC):
     tier: int = 0  # 0=zero-config, 1=needs free key, 2=needs setup
     capabilities: tuple[str, ...] = ("read",)
 
+    #: True when check() makes an outbound network request to a third-party
+    #: host as its probe. Doctor skips these unless run with live=True, so a
+    #: default health check never leaks the user's IP to external services.
+    network: bool = False
+
     #: Backend currently serving this channel; set by check(), None = unavailable.
     active_backend: str | None = None
 

@@ -15,15 +15,37 @@ from agent_reach.models import CapabilityReadiness, ChannelHealth
 from agent_reach.probe import probe_session
 
 
-def check_all(config: Config | None, *, deadline: float = 30.0) -> dict[str, dict[str, object]]:
+def check_all(
+    config: Config | None, *, deadline: float = 30.0, live: bool = False
+) -> dict[str, dict[str, object]]:
     """Check all channels and return status dict.
 
     A single misbehaving channel must never take the whole report down,
     so per-channel exceptions degrade to status="error".
+
+    By default (``live=False``) channels whose probe makes an outbound
+    network request (``Channel.network``) are reported as "skipped" without
+    being run, so a routine health check never leaks the user's IP to
+    third-party services. Pass ``live=True`` to actually exercise them.
     """
     channels = get_all_channels()
 
     def check_channel(ch):
+        if getattr(ch, "network", False) and not live:
+            ch.active_backend = None
+            message = "已跳过（联网探测，用 `agent-reach doctor --live` 实际检测）"
+            capabilities = {
+                cap: CapabilityReadiness("unknown", None, message) for cap in ch.capabilities
+            }
+            return ch.name, ChannelHealth(
+                status="skipped",
+                name=ch.description,
+                message=message,
+                tier=ch.tier,
+                backends=list(ch.backends),
+                active_backend=None,
+                capabilities=capabilities,
+            ).to_dict()
         try:
             status, message = ch.check(config)
             active = getattr(ch, "active_backend", None)
@@ -113,11 +135,11 @@ def format_report(results: dict[str, dict[str, object]]) -> str:
     lines.append("[bold cyan]Agent Reach 状态[/bold cyan]")
     lines.append("[cyan]" + "=" * 40 + "[/cyan]")
     lines.append(
-        "图例：[green]✅[/green] 可用  [yellow][!][/yellow] 已装但需配置/登录  [red][X][/red] 未安装"
+        "图例：[green]✅[/green] 可用  [yellow][!][/yellow] 已装但需配置/登录  [red][X][/red] 未安装  [dim]--[/dim] 跳过联网探测"
     )
 
     ok_count = sum(1 for r in results.values() if r["status"] == "ok")
-    total = len(results)
+    total = sum(1 for r in results.values() if r["status"] != "skipped")
 
     # Tier 0 — zero config
     lines.append("")
@@ -135,7 +157,7 @@ def format_report(results: dict[str, dict[str, object]]) -> str:
     # Tier 1 — needs free key / login
     tier1 = {k: r for k, r in results.items() if r["tier"] == 1}
     tier1_active = {k: r for k, r in tier1.items() if r["status"] == "ok"}
-    tier1_inactive = {k: r for k, r in tier1.items() if r["status"] != "ok"}
+    tier1_inactive = {k: r for k, r in tier1.items() if r["status"] not in ("ok", "skipped")}
     if tier1_active:
         lines.append("")
         lines.append("[bold]可选渠道（已安装）：[/bold]")
@@ -145,13 +167,20 @@ def format_report(results: dict[str, dict[str, object]]) -> str:
     # Tier 2 — optional complex setup
     tier2 = {k: r for k, r in results.items() if r["tier"] == 2}
     tier2_active = {k: r for k, r in tier2.items() if r["status"] == "ok"}
-    tier2_inactive = {k: r for k, r in tier2.items() if r["status"] != "ok"}
+    tier2_inactive = {k: r for k, r in tier2.items() if r["status"] not in ("ok", "skipped")}
     if tier2_active:
         if not tier1_active:
             lines.append("")
             lines.append("[bold]可选渠道（已安装）：[/bold]")
         for key, r in tier2_active.items():
             lines.append(f"  [green]✅[/green] {_name_msg(r, escape)}")
+
+    skipped = [r for r in results.values() if r["status"] == "skipped"]
+    if skipped:
+        lines.append("")
+        lines.append("[bold]联网探测已跳过（`--live` 实测）：[/bold]")
+        for r in skipped:
+            lines.append(f"  [dim]--  {escape(str(r['name']))}[/dim]")
 
     lines.append("")
     status_color = "green" if ok_count == total else ("yellow" if ok_count > 0 else "red")

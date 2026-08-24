@@ -15,9 +15,6 @@ from .v2ex import V2EXChannel
 
 # Import all channels
 from .web import WebChannel
-from .xiaohongshu import XiaoHongShuChannel
-from .xiaoyuzhou import XiaoyuzhouChannel
-from .xueqiu import XueqiuChannel
 from .youtube import YouTubeChannel
 
 ALL_CHANNEL_TYPES: tuple[type[Channel], ...] = (
@@ -26,11 +23,8 @@ ALL_CHANNEL_TYPES: tuple[type[Channel], ...] = (
     YouTubeChannel,
     RedditChannel,
     BilibiliChannel,
-    XiaoHongShuChannel,
     LinkedInChannel,
-    XiaoyuzhouChannel,
     V2EXChannel,
-    XueqiuChannel,
     RSSChannel,
     ExaSearchChannel,
     WebChannel,
